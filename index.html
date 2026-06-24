@@ -228,22 +228,55 @@ function switchTab(tab){
   document.getElementById('pane-file').style.display  = tab==='file'  ? '' : 'none';
 }
 
+/* ── TSV 파서 (Excel 클립보드: 따옴표 인용 + 셀 내 줄바꿈 지원) ── */
+function parseTSV(text){
+  const rows=[], n=text.length; let i=0;
+  while(i<n){
+    const row=[]; let eol=false;
+    while(i<n && !eol){
+      let field='';
+      if(text[i]==='"'){
+        i++;
+        while(i<n){
+          if(text[i]==='"'){
+            if(i+1<n && text[i+1]==='"'){ field+='"'; i+=2; }
+            else{ i++; break; }
+          } else { field+=text[i++]; }
+        }
+        // skip trailing whitespace before tab/newline
+        while(i<n && text[i]===' ') i++;
+      } else {
+        while(i<n && text[i]!=='\t' && text[i]!=='\r' && text[i]!=='\n') field+=text[i++];
+      }
+      row.push(field.trim());
+      if(i>=n){ eol=true; }
+      else if(text[i]==='\t'){ i++; }
+      else if(text[i]==='\r'||text[i]==='\n'){
+        if(text[i]==='\r'&&i+1<n&&text[i+1]==='\n') i++;
+        i++; eol=true;
+      }
+    }
+    if(row.length>1||(row.length===1&&row[0]!=='')) rows.push(row);
+  }
+  return rows;
+}
+
 /* ── 붙여넣기 파싱 ── */
 function parsePaste(){
-  const raw = document.getElementById('paste-area').value.trim();
+  const raw = document.getElementById('paste-area').value;
   const msg = document.getElementById('paste-msg');
-  if(!raw){ msg.textContent='데이터를 붙여넣어 주세요.'; return; }
-  const lines = raw.split(/\r?\n/);
-  if(lines.length < 2){ msg.textContent='데이터 행이 부족합니다 (헤더+1행 이상 필요).'; return; }
-  const headers = lines[0].split('\t');
-  const rows = lines.slice(1).filter(l=>l.trim()).map(l=>{
-    const cols = l.split('\t');
+  if(!raw.trim()){ msg.textContent='데이터를 붙여넣어 주세요.'; return; }
+  const rows = parseTSV(raw);
+  if(rows.length < 2){ msg.textContent='데이터 행이 부족합니다 (헤더+1행 이상 필요).'; return; }
+  const headers = rows[0];
+  const objRows = rows.slice(1).filter(r=>r.some(c=>c)).map(cols=>{
     const obj={};
     headers.forEach((h,i)=>{ obj[h]=cols[i]||''; });
     return obj;
   });
-  allItems = rows.map(parseRow);
+  allItems = objRows.map(parseRow);
   if(!allItems.length){ msg.textContent='파싱된 행이 없습니다.'; return; }
+  msg.textContent='';
   showData(allItems.length + '개 문항 로드됨');
 }
 
