@@ -12,8 +12,7 @@
 body{background:var(--bg);font-size:14px;}
 .site-header{background:var(--primary);color:#fff;padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
 .site-header h1{margin:0;font-size:1.3rem;font-weight:700;letter-spacing:-0.3px;}
-.upload-zone{border:2px dashed #adb5bd;border-radius:10px;padding:30px;text-align:center;background:#fff;cursor:pointer;transition:.2s;}
-.upload-zone.drag-over{border-color:var(--primary);background:#eef2fb;}
+.loaded-badge{background:rgba(255,255,255,.15);border-radius:20px;padding:3px 12px;font-size:12px;color:#fff;}
 .filter-panel{background:#fff;border-radius:10px;padding:16px 20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);}
 .filter-panel .filter-row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;}
 .filter-group{display:flex;flex-direction:column;gap:4px;min-width:120px;}
@@ -51,6 +50,10 @@ table.item-table tbody tr:hover{background:#f8f9ff;}
 .section-title{font-size:13px;font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:10px;}
 .empty-state{text-align:center;padding:60px 20px;color:#aaa;}
 .empty-state i{font-size:48px;display:block;margin-bottom:12px;}
+.nav-tabs .nav-link{color:#555;font-size:13px;font-weight:600;}
+.nav-tabs .nav-link.active{color:var(--primary);border-bottom-color:#fff;}
+.paste-zone{width:100%;height:90px;border:2px dashed #adb5bd;border-radius:8px;padding:12px;font-size:13px;resize:vertical;outline:none;transition:.2s;}
+.paste-zone:focus{border-color:var(--primary);}
 </style>
 </head>
 <body>
@@ -59,21 +62,56 @@ table.item-table tbody tr:hover{background:#f8f9ff;}
   <i class="bi bi-journal-check" style="font-size:1.5rem;"></i>
   <h1>PM 문제 리뷰 시스템</h1>
   <div class="ms-auto d-flex align-items-center gap-2">
-    <span id="file-name" class="text-white-50" style="font-size:12px;"></span>
-    <label class="btn btn-sm" style="background:var(--accent);color:#fff;font-weight:600;cursor:pointer;margin:0;">
-      <i class="bi bi-upload me-1"></i>파일 업로드
-      <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none;">
-    </label>
+    <span id="loaded-badge" class="loaded-badge" style="display:none;">
+      <i class="bi bi-check-circle me-1"></i><span id="loaded-label"></span>
+    </span>
   </div>
 </div>
 
 <div class="container-fluid px-3 py-3">
 
-  <!-- 업로드 안내 -->
-  <div id="upload-area" class="upload-zone mb-3">
-    <i class="bi bi-file-earmark-spreadsheet" style="font-size:2.5rem;color:#aaa;"></i>
-    <p class="mt-2 mb-1 fw-semibold" style="color:#555;">Excel(.xlsx) 또는 CSV 파일을 드래그하거나 위 버튼으로 업로드하세요</p>
-    <p style="color:#aaa;font-size:12px;">출제연도, 문항차수, Status, 역량명, 문항 난이도, 방법론 등 컬럼 포함 파일</p>
+  <!-- 입력 방식 선택 -->
+  <div id="upload-area" class="mb-3">
+    <ul class="nav nav-tabs" style="border-bottom:none;">
+      <li class="nav-item">
+        <a class="nav-link active" id="tab-paste" href="#" onclick="switchTab('paste');return false;">
+          <i class="bi bi-clipboard-data me-1"></i>Excel 붙여넣기
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" id="tab-file" href="#" onclick="switchTab('file');return false;">
+          <i class="bi bi-file-earmark-spreadsheet me-1"></i>파일 업로드
+        </a>
+      </li>
+    </ul>
+    <div style="background:#fff;border:1px solid #dee2e6;border-radius:0 4px 10px 10px;padding:20px;">
+
+      <!-- 붙여넣기 탭 -->
+      <div id="pane-paste">
+        <p class="mb-2" style="color:#444;font-weight:600;">
+          <i class="bi bi-info-circle me-1" style="color:var(--primary);"></i>
+          OneDrive/Excel에서 헤더 포함 데이터 전체 선택(Ctrl+A) → 복사(Ctrl+C) → 아래 클릭 후 붙여넣기(Ctrl+V)
+        </p>
+        <textarea id="paste-area" class="paste-zone" placeholder="여기를 클릭하고 Ctrl+V로 붙여넣으세요"></textarea>
+        <div class="mt-2 d-flex align-items-center gap-2">
+          <button class="btn btn-sm" style="background:var(--accent);color:#fff;font-weight:600;" onclick="parsePaste()">
+            <i class="bi bi-check2-circle me-1"></i>데이터 불러오기
+          </button>
+          <span id="paste-msg" style="font-size:12px;color:#888;"></span>
+        </div>
+      </div>
+
+      <!-- 파일 탭 -->
+      <div id="pane-file" style="display:none;text-align:center;padding:8px 0;">
+        <i class="bi bi-file-earmark-spreadsheet" style="font-size:2rem;color:#aaa;"></i>
+        <p class="mt-2 mb-2 fw-semibold" style="color:#555;">Excel(.xlsx) 또는 CSV 파일을 드래그하거나 선택하세요</p>
+        <label class="btn btn-sm" style="background:var(--accent);color:#fff;font-weight:600;cursor:pointer;">
+          <i class="bi bi-upload me-1"></i>파일 선택
+          <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none;">
+        </label>
+        <div id="drop-hint" style="margin-top:8px;font-size:11px;color:#aaa;">또는 이 영역으로 파일을 드래그하세요</div>
+      </div>
+    </div>
   </div>
 
   <!-- 필터 -->
@@ -115,6 +153,9 @@ table.item-table tbody tr:hover{background:#f8f9ff;}
   <div id="stats-bar" class="stats-bar" style="display:none;">
     <span>전체 <span id="total-count" class="badge-count">0</span>문항</span>
     <span>필터 적용 <span id="filtered-count" class="badge-count">0</span>문항</span>
+    <button class="btn btn-sm btn-outline-secondary ms-auto" style="font-size:11px;" onclick="reloadInput()">
+      <i class="bi bi-arrow-counterclockwise me-1"></i>다시 불러오기
+    </button>
   </div>
 
   <!-- 테이블 -->
@@ -179,8 +220,83 @@ const COL = {
 let allItems=[], filteredItems=[];
 const detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
 
-function normalizeKey(k){ return k.replace(/[\s\n\r\u00a0]/g,''); }
+/* ── 탭 전환 ── */
+function switchTab(tab){
+  document.getElementById('tab-paste').classList.toggle('active', tab==='paste');
+  document.getElementById('tab-file').classList.toggle('active',  tab==='file');
+  document.getElementById('pane-paste').style.display = tab==='paste' ? '' : 'none';
+  document.getElementById('pane-file').style.display  = tab==='file'  ? '' : 'none';
+}
 
+/* ── 붙여넣기 파싱 ── */
+function parsePaste(){
+  const raw = document.getElementById('paste-area').value.trim();
+  const msg = document.getElementById('paste-msg');
+  if(!raw){ msg.textContent='데이터를 붙여넣어 주세요.'; return; }
+  const lines = raw.split(/\r?\n/);
+  if(lines.length < 2){ msg.textContent='데이터 행이 부족합니다 (헤더+1행 이상 필요).'; return; }
+  const headers = lines[0].split('\t');
+  const rows = lines.slice(1).filter(l=>l.trim()).map(l=>{
+    const cols = l.split('\t');
+    const obj={};
+    headers.forEach((h,i)=>{ obj[h]=cols[i]||''; });
+    return obj;
+  });
+  allItems = rows.map(parseRow);
+  if(!allItems.length){ msg.textContent='파싱된 행이 없습니다.'; return; }
+  showData(allItems.length + '개 문항 로드됨');
+}
+
+/* ── 파일 업로드 ── */
+function handleFile(file){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    let wb;
+    try{ wb=XLSX.read(e.target.result,{type:'binary',codepage:65001}); }
+    catch(err){ alert('파일을 읽을 수 없습니다: '+err.message); return; }
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const raw=XLSX.utils.sheet_to_json(ws,{defval:''});
+    allItems=raw.map(parseRow);
+    showData(file.name + ' (' + allItems.length + '개)');
+  };
+  reader.readAsBinaryString(file);
+}
+
+document.getElementById('file-input').addEventListener('change',e=>{
+  if(e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+/* 드래그앤드롭 (파일 탭 전체 영역) */
+document.addEventListener('dragover',e=>e.preventDefault());
+document.addEventListener('drop',e=>{
+  e.preventDefault();
+  const f=e.dataTransfer.files[0];
+  if(f && /\.(xlsx|xls|csv)$/i.test(f.name)){ switchTab('file'); handleFile(f); }
+});
+
+/* ── 데이터 표시 공통 ── */
+function showData(label){
+  document.getElementById('loaded-label').textContent = label;
+  document.getElementById('loaded-badge').style.display = '';
+  document.getElementById('upload-area').style.display = 'none';
+  document.getElementById('filter-area').style.display = '';
+  document.getElementById('stats-bar').style.display  = '';
+  document.getElementById('table-area').style.display  = '';
+  initFilters(); applyFilters();
+}
+
+function reloadInput(){
+  document.getElementById('upload-area').style.display = '';
+  document.getElementById('filter-area').style.display = 'none';
+  document.getElementById('stats-bar').style.display  = 'none';
+  document.getElementById('table-area').style.display  = 'none';
+  document.getElementById('loaded-badge').style.display = 'none';
+  document.getElementById('paste-area').value = '';
+  allItems=[]; filteredItems=[];
+}
+
+/* ── 공통 파싱 ── */
+function normalizeKey(k){ return k.replace(/[\s\n\r\u00a0]/g,''); }
 function parseRow(raw){
   const r={};
   for(const [k,v] of Object.entries(raw)){
@@ -191,48 +307,15 @@ function parseRow(raw){
   return r;
 }
 
-function handleFile(file){
-  const reader=new FileReader();
-  reader.onload=e=>{
-    let wb;
-    try{ wb=XLSX.read(e.target.result,{type:'binary',codepage:65001}); }
-    catch(err){ alert('파일을 읽을 수 없습니다: '+err.message); return; }
-    const ws=wb.Sheets[wb.SheetNames[0]];
-    const raw=XLSX.utils.sheet_to_json(ws,{defval:''});
-    allItems=raw.map(parseRow);
-    document.getElementById('file-name').textContent=file.name;
-    document.getElementById('upload-area').style.display='none';
-    document.getElementById('filter-area').style.display='';
-    document.getElementById('stats-bar').style.display='';
-    document.getElementById('table-area').style.display='';
-    initFilters();
-    applyFilters();
-  };
-  reader.readAsBinaryString(file);
-}
-
-document.getElementById('file-input').addEventListener('change',e=>{
-  if(e.target.files[0]) handleFile(e.target.files[0]);
-});
-
-const ua=document.getElementById('upload-area');
-ua.addEventListener('dragover',e=>{e.preventDefault();ua.classList.add('drag-over');});
-ua.addEventListener('dragleave',()=>ua.classList.remove('drag-over'));
-ua.addEventListener('drop',e=>{
-  e.preventDefault(); ua.classList.remove('drag-over');
-  if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
-});
-
+/* ── 필터 ── */
 function uniqueVals(key){
   return [...new Set(allItems.map(r=>r[key]||'').filter(Boolean))].sort();
 }
-
 function populateSelect(id,vals){
   const sel=document.getElementById(id);
   sel.innerHTML=vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
   sel.size=Math.min(vals.length,4);
 }
-
 function initFilters(){
   populateSelect('f-year',uniqueVals('year'));
   populateSelect('f-round',uniqueVals('round'));
@@ -243,11 +326,9 @@ function initFilters(){
   ['f-year','f-round','f-status','f-competency','f-difficulty','f-methodology']
     .forEach(id=>document.getElementById(id).addEventListener('change',applyFilters));
 }
-
 function getSelected(id){
   return [...document.getElementById(id).selectedOptions].map(o=>o.value);
 }
-
 function applyFilters(){
   const fy=getSelected('f-year'),fr=getSelected('f-round'),fs=getSelected('f-status'),
         fc=getSelected('f-competency'),fd=getSelected('f-difficulty'),fm=getSelected('f-methodology');
@@ -264,13 +345,13 @@ function applyFilters(){
   document.getElementById('filtered-count').textContent=filteredItems.length;
   renderTable();
 }
-
 function resetFilters(){
   ['f-year','f-round','f-status','f-competency','f-difficulty','f-methodology']
     .forEach(id=>{ const s=document.getElementById(id); for(const o of s.options) o.selected=false; });
   applyFilters();
 }
 
+/* ── 배지 ── */
 function statusBadge(s){
   const cls=s==='변경'?'변경':s==='확정'?'확정':s.includes('검토')?'검토':'other';
   return `<span class="badge-status ${cls}">${esc(s)}</span>`;
@@ -280,6 +361,7 @@ function diffBadge(d){
   return `<span class="badge-diff ${cls}">${esc(d)}</span>`;
 }
 
+/* ── 테이블 렌더링 ── */
 function renderTable(){
   const tbody=document.getElementById('table-body');
   const empty=document.getElementById('empty-state');
@@ -302,13 +384,12 @@ function renderTable(){
     </tr>`).join('');
 }
 
+/* ── 상세 모달 ── */
 function showDetail(idx){
   const r=filteredItems[idx];
   document.getElementById('modal-title').textContent=r.title||'문항 상세';
   document.getElementById('modal-subtitle').textContent=(r.itemId?'ID: '+r.itemId+' | ':'')+`${r.year||''} ${r.round||''} | ${r.compName||''}`;
-
   const answers=(r.answer||'').split(/[,，、\s]+/).map(a=>a.trim()).filter(Boolean);
-
   const opts=[r.opt1,r.opt2,r.opt3,r.opt4,r.opt5].map((o,i)=>{
     if(!o) return '';
     const num=String(i+1);
@@ -319,16 +400,13 @@ function showDetail(idx){
       ${isCorrect?'<span class="ms-auto text-success"><i class="bi bi-check-circle-fill"></i></span>':''}
     </div>`;
   }).join('');
-
   document.getElementById('modal-body').innerHTML=`
     <div class="d-flex gap-2 mb-3 flex-wrap">
-      ${statusBadge(r.status||'')}
-      ${diffBadge(r.difficulty||'')}
+      ${statusBadge(r.status||'')} ${diffBadge(r.difficulty||'')}
       <span class="badge bg-secondary">${esc(r.methodology||'')}</span>
       <span class="badge bg-info text-dark">${esc(r.type||'')}</span>
       ${r.comment?`<span class="badge bg-warning text-dark"><i class="bi bi-chat-left-text me-1"></i>${esc(r.comment)}</span>`:''}
     </div>
-
     <div class="meta-grid">
       <div class="meta-item"><div class="meta-label">역량 NO</div><div class="meta-value">${esc(r.compNo||'-')}</div></div>
       <div class="meta-item"><div class="meta-label">역량명</div><div class="meta-value">${esc(r.compName||'-')}</div></div>
@@ -337,26 +415,16 @@ function showDetail(idx){
       <div class="meta-item"><div class="meta-label">실제 오답율</div><div class="meta-value">${esc(r.actError||'-')}</div></div>
       <div class="meta-item"><div class="meta-label">정답 번호</div><div class="meta-value fw-bold text-success">${esc(r.answer||'-')}</div></div>
     </div>
-
     ${r.compGoal?`<div class="mb-3"><div class="section-title">세부역량 수행목표</div><p style="color:#444;">${esc(r.compGoal)}</p></div>`:''}
-
-    <div class="mb-3">
-      <div class="section-title">문제</div>
-      <div class="question-box">${esc(r.question||'-')}</div>
-    </div>
-
+    <div class="mb-3"><div class="section-title">문제</div><div class="question-box">${esc(r.question||'-')}</div></div>
     ${opts?`<div class="mb-3"><div class="section-title">보기</div>${opts}</div>`:''}
-
     ${r.explanation?`<div class="mb-3"><div class="section-title">정답 해설</div><div class="explanation-box">${esc(r.explanation)}</div></div>`:''}
-
     ${r.errTag?`<div class="mb-3"><div class="section-title">오답 유형</div><span class="badge bg-secondary">${esc(r.errTag)}</span></div>`:''}
-
     <div class="meta-grid">
       ${r.module?`<div class="meta-item" style="grid-column:1/-1;"><div class="meta-label">출제 기준 교육 모듈</div><div class="meta-value">${esc(r.module)}</div></div>`:''}
       ${r.reference?`<div class="meta-item" style="grid-column:1/-1;"><div class="meta-label">참고 문서</div><div class="meta-value" style="white-space:pre-wrap;">${esc(r.reference)}</div></div>`:''}
       ${r.dupCheck?`<div class="meta-item" style="grid-column:1/-1;"><div class="meta-label">중복 검증 결과</div><div class="meta-value">${esc(r.dupCheck)}</div></div>`:''}
     </div>`;
-
   detailModal.show();
 }
 
