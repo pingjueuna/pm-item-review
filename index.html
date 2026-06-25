@@ -1,469 +1,151 @@
-﻿<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PM 문제 리뷰 시스템</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<style>
-:root{--primary:#1a2e52;--primary-light:#2d4a80;--accent:#e8a020;--bg:#f4f6fb;}
-body{background:var(--bg);font-size:14px;}
-.site-header{background:var(--primary);color:#fff;padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
-.site-header h1{margin:0;font-size:1.3rem;font-weight:700;letter-spacing:-0.3px;}
-.loaded-badge{background:rgba(255,255,255,.15);border-radius:20px;padding:3px 12px;font-size:12px;color:#fff;}
-.filter-panel{background:#fff;border-radius:10px;padding:16px 20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);}
-.filter-panel .filter-row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;}
-.filter-group{display:flex;flex-direction:column;gap:4px;min-width:120px;}
-.filter-group label{font-size:11px;font-weight:600;color:#555;text-transform:uppercase;letter-spacing:.4px;}
-.filter-group select{font-size:12px;border-radius:6px;border:1px solid #ced4da;padding:4px 8px;background:#fff;}
-.stats-bar{display:flex;gap:16px;align-items:center;margin-bottom:12px;font-size:13px;color:#555;}
-.stats-bar .badge-count{background:var(--primary);color:#fff;border-radius:20px;padding:2px 10px;font-weight:700;}
-table.item-table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);}
-table.item-table thead{background:var(--primary);color:#fff;}
-table.item-table th{padding:10px 12px;font-size:12px;font-weight:600;white-space:nowrap;}
-table.item-table td{padding:9px 12px;border-bottom:1px solid #f0f2f5;font-size:13px;vertical-align:middle;}
-table.item-table tr:last-child td{border-bottom:none;}
-table.item-table tbody tr:hover{background:#f8f9ff;}
-.badge-status{font-size:11px;padding:3px 8px;border-radius:12px;font-weight:600;}
-.badge-status.변경{background:#fff3cd;color:#856404;}
-.badge-status.확정{background:#d1e7dd;color:#0a5239;}
-.badge-status.검토{background:#cff4fc;color:#055160;}
-.badge-status.other{background:#e9ecef;color:#495057;}
-.badge-diff{font-size:11px;padding:3px 8px;border-radius:12px;font-weight:600;}
-.badge-diff.상{background:#f8d7da;color:#842029;}
-.badge-diff.중{background:#fff3cd;color:#856404;}
-.badge-diff.하{background:#d1e7dd;color:#0a5239;}
-.btn-detail{font-size:11px;padding:3px 10px;border-radius:6px;}
-.modal-header{background:var(--primary);color:#fff;}
-.modal-header .btn-close{filter:invert(1);}
-.question-box{background:#f8f9fa;border-left:4px solid var(--primary);border-radius:4px;padding:16px;white-space:pre-wrap;line-height:1.7;}
-.option-item{padding:8px 14px;border-radius:6px;margin-bottom:6px;border:1px solid #e0e3ea;display:flex;gap:10px;}
-.option-item.correct{background:#d1e7dd;border-color:#a3cfbb;font-weight:600;}
-.option-item .opt-num{font-weight:700;color:var(--primary);min-width:20px;}
-.explanation-box{background:#fff8e8;border:1px solid #fde68a;border-radius:8px;padding:14px;white-space:pre-wrap;line-height:1.7;}
-.meta-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-bottom:12px;}
-.meta-item{background:#f4f6fb;border-radius:6px;padding:8px 12px;}
-.meta-item .meta-label{font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.3px;}
-.meta-item .meta-value{font-size:13px;font-weight:500;color:#222;}
-.section-title{font-size:13px;font-weight:700;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:10px;}
-.empty-state{text-align:center;padding:60px 20px;color:#aaa;}
-.empty-state i{font-size:48px;display:block;margin-bottom:12px;}
-.nav-tabs .nav-link{color:#555;font-size:13px;font-weight:600;}
-.nav-tabs .nav-link.active{color:var(--primary);border-bottom-color:#fff;}
-.paste-zone{width:100%;height:90px;border:2px dashed #adb5bd;border-radius:8px;padding:12px;font-size:13px;resize:vertical;outline:none;transition:.2s;}
-.paste-zone:focus{border-color:var(--primary);}
-</style>
-</head>
-<body>
-
-<div class="site-header">
-  <i class="bi bi-journal-check" style="font-size:1.5rem;"></i>
-  <h1>PM 문제 리뷰 시스템</h1>
-  <div class="ms-auto d-flex align-items-center gap-2">
-    <span id="loaded-badge" class="loaded-badge" style="display:none;">
-      <i class="bi bi-check-circle me-1"></i><span id="loaded-label"></span>
-    </span>
-  </div>
-</div>
-
-<div class="container-fluid px-3 py-3">
-
-  <!-- 입력 방식 선택 -->
-  <div id="upload-area" class="mb-3">
-    <ul class="nav nav-tabs" style="border-bottom:none;">
-      <li class="nav-item">
-        <a class="nav-link active" id="tab-paste" href="#" onclick="switchTab('paste');return false;">
-          <i class="bi bi-clipboard-data me-1"></i>Excel 붙여넣기
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" id="tab-file" href="#" onclick="switchTab('file');return false;">
-          <i class="bi bi-file-earmark-spreadsheet me-1"></i>파일 업로드
-        </a>
-      </li>
-    </ul>
-    <div style="background:#fff;border:1px solid #dee2e6;border-radius:0 4px 10px 10px;padding:20px;">
-
-      <!-- 붙여넣기 탭 -->
-      <div id="pane-paste">
-        <p class="mb-2" style="color:#444;font-weight:600;">
-          <i class="bi bi-info-circle me-1" style="color:var(--primary);"></i>
-          OneDrive/Excel에서 헤더 포함 데이터 전체 선택(Ctrl+A) → 복사(Ctrl+C) → 아래 클릭 후 붙여넣기(Ctrl+V)
-        </p>
-        <textarea id="paste-area" class="paste-zone" placeholder="여기를 클릭하고 Ctrl+V로 붙여넣으세요"></textarea>
-        <div class="mt-2 d-flex align-items-center gap-2">
-          <button class="btn btn-sm" style="background:var(--accent);color:#fff;font-weight:600;" onclick="parsePaste()">
-            <i class="bi bi-check2-circle me-1"></i>데이터 불러오기
-          </button>
-          <span id="paste-msg" style="font-size:12px;color:#888;"></span>
-        </div>
-      </div>
-
-      <!-- 파일 탭 -->
-      <div id="pane-file" style="display:none;text-align:center;padding:8px 0;">
-        <i class="bi bi-file-earmark-spreadsheet" style="font-size:2rem;color:#aaa;"></i>
-        <p class="mt-2 mb-2 fw-semibold" style="color:#555;">Excel(.xlsx) 또는 CSV 파일을 드래그하거나 선택하세요</p>
-        <label class="btn btn-sm" style="background:var(--accent);color:#fff;font-weight:600;cursor:pointer;">
-          <i class="bi bi-upload me-1"></i>파일 선택
-          <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none;">
-        </label>
-        <div id="drop-hint" style="margin-top:8px;font-size:11px;color:#aaa;">또는 이 영역으로 파일을 드래그하세요</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 필터 -->
-  <div id="filter-area" class="filter-panel" style="display:none;">
-    <div class="filter-row">
-      <div class="filter-group">
-        <label>출제연도</label>
-        <select id="f-year" multiple size="2"></select>
-      </div>
-      <div class="filter-group">
-        <label>문항차수</label>
-        <select id="f-round" multiple size="2"></select>
-      </div>
-      <div class="filter-group">
-        <label>Status</label>
-        <select id="f-status" multiple size="2"></select>
-      </div>
-      <div class="filter-group" style="min-width:160px;">
-        <label>역량명</label>
-        <select id="f-competency" multiple size="2"></select>
-      </div>
-      <div class="filter-group">
-        <label>문항 난이도</label>
-        <select id="f-difficulty" multiple size="2"></select>
-      </div>
-      <div class="filter-group" style="min-width:140px;">
-        <label>방법론</label>
-        <select id="f-methodology" multiple size="2"></select>
-      </div>
-      <div class="filter-group justify-content-end">
-        <label style="visibility:hidden">.</label>
-        <button class="btn btn-sm btn-outline-secondary" onclick="resetFilters()"><i class="bi bi-x-circle me-1"></i>초기화</button>
-      </div>
-    </div>
-    <div style="font-size:11px;color:#aaa;margin-top:6px;">Ctrl(Cmd) + 클릭으로 다중 선택</div>
-  </div>
-
-  <!-- 통계 -->
-  <div id="stats-bar" class="stats-bar" style="display:none;">
-    <span>전체 <span id="total-count" class="badge-count">0</span>문항</span>
-    <span>필터 적용 <span id="filtered-count" class="badge-count">0</span>문항</span>
-    <button class="btn btn-sm btn-outline-secondary ms-auto" style="font-size:11px;" onclick="reloadInput()">
-      <i class="bi bi-arrow-counterclockwise me-1"></i>다시 불러오기
-    </button>
-  </div>
-
-  <!-- 테이블 -->
-  <div id="table-area" style="display:none;">
-    <div style="overflow-x:auto;">
-      <table class="item-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>문항 ID</th>
-            <th>출제연도</th>
-            <th>문항차수</th>
-            <th>Status</th>
-            <th>역량명</th>
-            <th>난이도</th>
-            <th>방법론</th>
-            <th style="min-width:220px;">문항 제목</th>
-            <th>유형</th>
-            <th>예상 오답율</th>
-            <th>상세</th>
-          </tr>
-        </thead>
-        <tbody id="table-body"></tbody>
-      </table>
-    </div>
-    <div id="empty-state" class="empty-state" style="display:none;">
-      <i class="bi bi-search"></i>
-      조건에 맞는 문항이 없습니다.
-    </div>
-  </div>
-</div>
-
-<!-- 상세보기 모달 -->
-<div class="modal fade" id="detailModal" tabindex="-1">
-  <div class="modal-dialog modal-xl modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header">
-        <div>
-          <h5 class="modal-title mb-1" id="modal-title">문항 상세</h5>
-          <small id="modal-subtitle" style="opacity:.75;"></small>
-        </div>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body" id="modal-body"></div>
-    </div>
-  </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- ✅ 중요: 변경된 JS 부분 중심, 기존 코드에 덮어쓰기 -->
 <script>
-const COL = {
-  '출제연도':'year','문항차수':'round','Status':'status','Comment':'comment',
-  '역량NO':'compNo','세부역량수행목표':'compGoal','역량명':'compName',
-  '문항난이도':'difficulty','방법론':'methodology','문항제목':'title',
-  '문항유형':'type','예상오답율':'expError','오답유형Tag':'errTag',
-  '문제':'question','보기1':'opt1','보기2':'opt2','보기3':'opt3',
-  '보기4':'opt4','보기5':'opt5','정답번호':'answer','정답해설':'explanation',
-  '출제기준교육모듈':'module','참고문서':'reference',
-  '중복검증결과':'dupCheck','실제오답율':'actError','문항ID':'itemId'
-};
 
-let allItems=[], filteredItems=[];
-const detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
+let showAnswer = false;
+let currentIdx = 0;
 
-/* ── 탭 전환 ── */
-function switchTab(tab){
-  document.getElementById('tab-paste').classList.toggle('active', tab==='paste');
-  document.getElementById('tab-file').classList.toggle('active',  tab==='file');
-  document.getElementById('pane-paste').style.display = tab==='paste' ? '' : 'none';
-  document.getElementById('pane-file').style.display  = tab==='file'  ? '' : 'none';
-}
+// ✅ 수정 함수
+function updateField(idx, key, value){
+  const item = filteredItems[idx];
+  item[key] = value;
 
-/* ── TSV 파서 (Excel 클립보드: 따옴표 인용 + 셀 내 줄바꿈 지원) ── */
-function parseTSV(text){
-  const rows=[], n=text.length; let i=0;
-  while(i<n){
-    const row=[]; let eol=false;
-    while(i<n && !eol){
-      let field='';
-      if(text[i]==='"'){
-        i++;
-        while(i<n){
-          if(text[i]==='"'){
-            if(i+1<n && text[i+1]==='"'){ field+='"'; i+=2; }
-            else{ i++; break; }
-          } else { field+=text[i++]; }
-        }
-        // skip trailing whitespace before tab/newline
-        while(i<n && text[i]===' ') i++;
-      } else {
-        while(i<n && text[i]!=='\t' && text[i]!=='\r' && text[i]!=='\n') field+=text[i++];
-      }
-      row.push(field.trim());
-      if(i>=n){ eol=true; }
-      else if(text[i]==='\t'){ i++; }
-      else if(text[i]==='\r'||text[i]==='\n'){
-        if(text[i]==='\r'&&i+1<n&&text[i+1]==='\n') i++;
-        i++; eol=true;
-      }
-    }
-    if(row.length>1||(row.length===1&&row[0]!=='')) rows.push(row);
+  const target = allItems.find(r => r.itemId === item.itemId);
+  if(target){
+    target[key] = value;
   }
-  return rows;
+
+  item._edited = true;
 }
 
-/* ── 붙여넣기 파싱 ── */
-function parsePaste(){
-  const raw = document.getElementById('paste-area').value;
-  const msg = document.getElementById('paste-msg');
-  if(!raw.trim()){ msg.textContent='데이터를 붙여넣어 주세요.'; return; }
-  const rows = parseTSV(raw);
-  if(rows.length < 2){ msg.textContent='데이터 행이 부족합니다 (헤더+1행 이상 필요).'; return; }
-  const headers = rows[0];
-  const objRows = rows.slice(1).filter(r=>r.some(c=>c)).map(cols=>{
-    const obj={};
-    headers.forEach((h,i)=>{ obj[h]=cols[i]||''; });
-    return obj;
-  });
-  allItems = objRows.map(parseRow);
-  if(!allItems.length){ msg.textContent='파싱된 행이 없습니다.'; return; }
-  msg.textContent='';
-  showData(allItems.length + '개 문항 로드됨');
+// ✅ 정답 토글
+function toggleAnswer(){
+  showAnswer = !showAnswer;
+  showDetail(currentIdx);
 }
 
-/* ── 파일 업로드 ── */
-function handleFile(file){
-  const reader=new FileReader();
-  reader.onload=e=>{
-    let wb;
-    try{ wb=XLSX.read(e.target.result,{type:'binary',codepage:65001}); }
-    catch(err){ alert('파일을 읽을 수 없습니다: '+err.message); return; }
-    const ws=wb.Sheets[wb.SheetNames[0]];
-    const raw=XLSX.utils.sheet_to_json(ws,{defval:''});
-    allItems=raw.map(parseRow);
-    showData(file.name + ' (' + allItems.length + '개)');
-  };
-  reader.readAsBinaryString(file);
-}
-
-document.getElementById('file-input').addEventListener('change',e=>{
-  if(e.target.files[0]) handleFile(e.target.files[0]);
-});
-
-/* 드래그앤드롭 (파일 탭 전체 영역) */
-document.addEventListener('dragover',e=>e.preventDefault());
-document.addEventListener('drop',e=>{
-  e.preventDefault();
-  const f=e.dataTransfer.files[0];
-  if(f && /\.(xlsx|xls|csv)$/i.test(f.name)){ switchTab('file'); handleFile(f); }
-});
-
-/* ── 데이터 표시 공통 ── */
-function showData(label){
-  document.getElementById('loaded-label').textContent = label;
-  document.getElementById('loaded-badge').style.display = '';
-  document.getElementById('upload-area').style.display = 'none';
-  document.getElementById('filter-area').style.display = '';
-  document.getElementById('stats-bar').style.display  = '';
-  document.getElementById('table-area').style.display  = '';
-  initFilters(); applyFilters();
-}
-
-function reloadInput(){
-  document.getElementById('upload-area').style.display = '';
-  document.getElementById('filter-area').style.display = 'none';
-  document.getElementById('stats-bar').style.display  = 'none';
-  document.getElementById('table-area').style.display  = 'none';
-  document.getElementById('loaded-badge').style.display = 'none';
-  document.getElementById('paste-area').value = '';
-  allItems=[]; filteredItems=[];
-}
-
-/* ── 공통 파싱 ── */
-function normalizeKey(k){ return k.replace(/[\s\n\r\u00a0]/g,''); }
-function parseRow(raw){
-  const r={};
-  for(const [k,v] of Object.entries(raw)){
-    const nk=normalizeKey(k);
-    const mapped=COL[nk]||nk;
-    r[mapped]=String(v||'').trim();
-  }
-  return r;
-}
-
-/* ── 필터 ── */
-function uniqueVals(key){
-  return [...new Set(allItems.map(r=>r[key]||'').filter(Boolean))].sort();
-}
-function populateSelect(id,vals){
-  const sel=document.getElementById(id);
-  sel.innerHTML=vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
-  sel.size=Math.min(vals.length,4);
-}
-function initFilters(){
-  populateSelect('f-year',uniqueVals('year'));
-  populateSelect('f-round',uniqueVals('round'));
-  populateSelect('f-status',uniqueVals('status'));
-  populateSelect('f-competency',uniqueVals('compName'));
-  populateSelect('f-difficulty',uniqueVals('difficulty'));
-  populateSelect('f-methodology',uniqueVals('methodology'));
-  ['f-year','f-round','f-status','f-competency','f-difficulty','f-methodology']
-    .forEach(id=>document.getElementById(id).addEventListener('change',applyFilters));
-}
-function getSelected(id){
-  return [...document.getElementById(id).selectedOptions].map(o=>o.value);
-}
-function applyFilters(){
-  const fy=getSelected('f-year'),fr=getSelected('f-round'),fs=getSelected('f-status'),
-        fc=getSelected('f-competency'),fd=getSelected('f-difficulty'),fm=getSelected('f-methodology');
-  filteredItems=allItems.filter(r=>{
-    if(fy.length&&!fy.includes(r.year)) return false;
-    if(fr.length&&!fr.includes(r.round)) return false;
-    if(fs.length&&!fs.includes(r.status)) return false;
-    if(fc.length&&!fc.includes(r.compName)) return false;
-    if(fd.length&&!fd.includes(r.difficulty)) return false;
-    if(fm.length&&!fm.includes(r.methodology)) return false;
-    return true;
-  });
-  document.getElementById('total-count').textContent=allItems.length;
-  document.getElementById('filtered-count').textContent=filteredItems.length;
-  renderTable();
-}
-function resetFilters(){
-  ['f-year','f-round','f-status','f-competency','f-difficulty','f-methodology']
-    .forEach(id=>{ const s=document.getElementById(id); for(const o of s.options) o.selected=false; });
-  applyFilters();
-}
-
-/* ── 배지 ── */
+// ✅ Status 배지 수정
 function statusBadge(s){
-  const cls=s==='변경'?'변경':s==='확정'?'확정':s.includes('검토')?'검토':'other';
+  let cls='other';
+
+  if(s==='변경') cls='변경';
+  else if(s==='확정') cls='확정';
+  else if(s==='전문가 확정') cls='전문가확정';
+  else if(s.includes('검토')) cls='검토';
+
   return `<span class="badge-status ${cls}">${esc(s)}</span>`;
 }
-function diffBadge(d){
-  const cls=d==='상'?'상':d==='중'?'중':d==='하'?'하':'other';
-  return `<span class="badge-diff ${cls}">${esc(d)}</span>`;
-}
 
-/* ── 테이블 렌더링 ── */
-function renderTable(){
-  const tbody=document.getElementById('table-body');
-  const empty=document.getElementById('empty-state');
-  if(!filteredItems.length){ tbody.innerHTML=''; empty.style.display=''; return; }
-  empty.style.display='none';
-  tbody.innerHTML=filteredItems.map((r,i)=>`
-    <tr>
-      <td style="color:#aaa;">${i+1}</td>
-      <td><code style="font-size:11px;">${esc(r.itemId||'-')}</code></td>
-      <td>${esc(r.year||'-')}</td>
-      <td>${esc(r.round||'-')}</td>
-      <td>${statusBadge(r.status||'-')}</td>
-      <td>${esc(r.compName||'-')}</td>
-      <td>${diffBadge(r.difficulty||'-')}</td>
-      <td>${esc(r.methodology||'-')}</td>
-      <td style="max-width:280px;"><span title="${esc(r.title||'')}">${esc(r.title||'-')}</span></td>
-      <td><small>${esc(r.type||'-')}</small></td>
-      <td style="text-align:right;">${esc(r.expError||'-')}</td>
-      <td><button class="btn btn-sm btn-outline-primary btn-detail" onclick="showDetail(${i})"><i class="bi bi-eye me-1"></i>보기</button></td>
-    </tr>`).join('');
-}
-
-/* ── 상세 모달 ── */
+// ✅ 상세보기 전체 (핵심 수정됨)
 function showDetail(idx){
-  const r=filteredItems[idx];
-  document.getElementById('modal-title').textContent=r.title||'문항 상세';
-  document.getElementById('modal-subtitle').textContent=(r.itemId?'ID: '+r.itemId+' | ':'')+`${r.year||''} ${r.round||''} | ${r.compName||''}`;
-  const answers=(r.answer||'').split(/[,，、\s]+/).map(a=>a.trim()).filter(Boolean);
-  const opts=[r.opt1,r.opt2,r.opt3,r.opt4,r.opt5].map((o,i)=>{
-    if(!o) return '';
-    const num=String(i+1);
-    const isCorrect=answers.includes(num)||answers.includes('①②③④⑤'[i]);
-    return `<div class="option-item${isCorrect?' correct':''}">
-      <span class="opt-num">${i+1}</span>
-      <span style="white-space:pre-wrap;">${esc(o)}</span>
-      ${isCorrect?'<span class="ms-auto text-success"><i class="bi bi-check-circle-fill"></i></span>':''}
+  currentIdx = idx;
+  const r = filteredItems[idx];
+
+  document.getElementById('modal-title').textContent = r.title || '문항 상세';
+
+  const answers = (r.answer || '')
+    .split(/[,，、\s]+/)
+    .map(a => a.trim())
+    .filter(Boolean);
+
+  // ✅ 보기 (정답 숨김)
+  const opts = [r.opt1,r.opt2,r.opt3,r.opt4,r.opt5].map((o,i)=>{
+    return `
+    <div class="mb-2">
+      <label style="font-size:12px;font-weight:600;">보기 ${i+1}</label>
+      <textarea class="form-control"
+        rows="2"
+        onchange="updateField(${idx}, 'opt${i+1}', this.value)">${esc(o||'')}</textarea>
     </div>`;
   }).join('');
-  document.getElementById('modal-body').innerHTML=`
-    <div class="d-flex gap-2 mb-3 flex-wrap">
-      ${statusBadge(r.status||'')} ${diffBadge(r.difficulty||'')}
-      <span class="badge bg-secondary">${esc(r.methodology||'')}</span>
-      <span class="badge bg-info text-dark">${esc(r.type||'')}</span>
-      ${r.comment?`<span class="badge bg-warning text-dark"><i class="bi bi-chat-left-text me-1"></i>${esc(r.comment)}</span>`:''}
+
+  document.getElementById('modal-body').innerHTML = `
+
+    <div class="d-flex gap-2 mb-3">
+      ${statusBadge(r.status||'')}
+      <button class="btn btn-sm btn-outline-primary" onclick="toggleAnswer()">
+        정답 보기 ${showAnswer ? 'OFF':'ON'}
+      </button>
     </div>
-    <div class="meta-grid">
-      <div class="meta-item"><div class="meta-label">역량 NO</div><div class="meta-value">${esc(r.compNo||'-')}</div></div>
-      <div class="meta-item"><div class="meta-label">역량명</div><div class="meta-value">${esc(r.compName||'-')}</div></div>
-      <div class="meta-item"><div class="meta-label">출제연도 / 차수</div><div class="meta-value">${esc(r.year||'-')} / ${esc(r.round||'-')}</div></div>
-      <div class="meta-item"><div class="meta-label">예상 오답율</div><div class="meta-value">${esc(r.expError||'-')}</div></div>
-      <div class="meta-item"><div class="meta-label">실제 오답율</div><div class="meta-value">${esc(r.actError||'-')}</div></div>
-      <div class="meta-item"><div class="meta-label">정답 번호</div><div class="meta-value fw-bold text-success">${esc(r.answer||'-')}</div></div>
+
+    <!-- ✅ Status 수정 -->
+    <div class="mb-3">
+      <div class="section-title">Status</div>
+      <select class="form-select"
+        onchange="updateField(${idx}, 'status', this.value)">
+        <option ${r.status==='검토'?'selected':''}>검토</option>
+        <option ${r.status==='변경'?'selected':''}>변경</option>
+        <option ${r.status==='확정'?'selected':''}>확정</option>
+        <option ${r.status==='전문가 확정'?'selected':''}>전문가 확정</option>
+      </select>
     </div>
-    ${r.compGoal?`<div class="mb-3"><div class="section-title">세부역량 수행목표</div><p style="color:#444;">${esc(r.compGoal)}</p></div>`:''}
-    <div class="mb-3"><div class="section-title">문제</div><div class="question-box">${esc(r.question||'-')}</div></div>
-    ${opts?`<div class="mb-3"><div class="section-title">보기</div>${opts}</div>`:''}
-    ${r.explanation?`<div class="mb-3"><div class="section-title">정답 해설</div><div class="explanation-box">${esc(r.explanation)}</div></div>`:''}
-    ${r.errTag?`<div class="mb-3"><div class="section-title">오답 유형</div><span class="badge bg-secondary">${esc(r.errTag)}</span></div>`:''}
-    <div class="meta-grid">
-      ${r.module?`<div class="meta-item" style="grid-column:1/-1;"><div class="meta-label">출제 기준 교육 모듈</div><div class="meta-value">${esc(r.module)}</div></div>`:''}
-      ${r.reference?`<div class="meta-item" style="grid-column:1/-1;"><div class="meta-label">참고 문서</div><div class="meta-value" style="white-space:pre-wrap;">${esc(r.reference)}</div></div>`:''}
-      ${r.dupCheck?`<div class="meta-item" style="grid-column:1/-1;"><div class="meta-label">중복 검증 결과</div><div class="meta-value">${esc(r.dupCheck)}</div></div>`:''}
-    </div>`;
+
+    <!-- ✅ 문제 수정 -->
+    <div class="mb-3">
+      <div class="section-title">문제</div>
+      <textarea class="form-control"
+        rows="6"
+        onchange="updateField(${idx}, 'question', this.value)">${esc(r.question||'')}</textarea>
+    </div>
+
+    <!-- ✅ 보기 수정 -->
+    <div class="mb-3">
+      <div class="section-title">보기</div>
+      ${opts}
+    </div>
+
+    <!-- ✅ 정답 (하단 표시) -->
+    ${showAnswer ? `
+    <div class="mb-3">
+      <div class="section-title">정답</div>
+      <div class="explanation-box" style="background:#e7f1ff;">
+        정답: <b>${esc(r.answer||'-')}</b>
+      </div>
+    </div>` : ''}
+
+    <!-- ✅ 해설 수정 -->
+    <div class="mb-3">
+      <div class="section-title">정답 해설</div>
+      <textarea class="form-control"
+        rows="5"
+        onchange="updateField(${idx}, 'explanation', this.value)">${esc(r.explanation||'')}</textarea>
+    </div>
+
+    <!-- ✅ 리뷰 코멘트 -->
+    <div class="mb-3">
+      <div class="section-title">리뷰 코멘트</div>
+      <textarea class="form-control"
+        rows="3"
+        placeholder="리뷰 의견"
+        onchange="updateField(${idx}, 'comment', this.value)">${esc(r.comment||'')}</textarea>
+    </div>
+
+  `;
+
   detailModal.show();
 }
 
-function esc(s){
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+// ✅ Excel 다운로드
+function downloadExcel(){
+  const exportData = allItems.map(r => ({
+    '문항ID': r.itemId || '',
+    'Status': r.status || '',
+    '문제': r.question || '',
+    '보기1': r.opt1 || '',
+    '보기2': r.opt2 || '',
+    '보기3': r.opt3 || '',
+    '보기4': r.opt4 || '',
+    '보기5': r.opt5 || '',
+    '정답번호': r.answer || '',
+    '정답해설': r.explanation || '',
+    'Comment': r.comment || ''
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(exportData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "리뷰결과");
+
+  XLSX.writeFile(wb, "PM_문항_리뷰결과.xlsx");
 }
+
 </script>
-</body>
-</html>
