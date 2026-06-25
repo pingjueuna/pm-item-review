@@ -2,69 +2,20 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>PM 문제 리뷰 시스템</title>
+<title>PM 리뷰 시스템 (최종)</title>
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <style>
-:root{
-  --primary:#03c75a;
-  --bg:#f5f6f7;
-  --card:#ffffff;
-  --border:#e5e5e5;
-}
-
-body{
-  background:var(--bg);
-  font-size:14px;
-}
-
-.card-box{
-  background:#fff;
-  border:1px solid var(--border);
-  border-radius:10px;
-  padding:16px;
-  margin-bottom:15px;
-  box-shadow:0 1px 3px rgba(0,0,0,0.05);
-}
-
-.table{
-  background:#fff;
-}
-
-.table tbody tr:hover{
-  background:#f9fafb;
-}
-
-.btn-primary{
-  background:var(--primary);
-  border:none;
-}
-
-.badge-status{
-  padding:4px 10px;
-  border-radius:12px;
-  font-size:12px;
-  font-weight:600;
-}
-
-.badge-status.검토{background:#eef9f3;color:#03c75a;}
-.badge-status.변경{background:#fff6e0;color:#d4a017;}
-.badge-status.확정{background:#ecf7ff;color:#0078d4;}
-.badge-status.전문가확정{background:#03c75a;color:#fff;}
-
-.section-title{
-  font-weight:700;
-  margin-top:12px;
-}
-
-.answer-box{
-  background:#eef6ff;
-  border:1px solid #d6e6ff;
-  padding:10px;
-  border-radius:6px;
-}
+body{background:#f5f6f7;font-size:14px}
+.card{background:#fff;padding:14px;border-radius:8px;margin-bottom:10px}
+.table tbody tr:hover{background:#f9fafb}
+.badge-status{padding:4px 8px;border-radius:10px;font-size:12px}
+.badge-status.검토{background:#eef9f3;color:#03c75a}
+.badge-status.변경{background:#fff6e0}
+.badge-status.확정{background:#e7f1ff}
+.badge-status.전문가{background:#03c75a;color:#fff}
 </style>
 </head>
 
@@ -72,30 +23,38 @@ body{
 
 <h4>PM 문제 리뷰 시스템</h4>
 
-<div class="card-box">
-<textarea id="paste" class="form-control" rows="5"
-placeholder="Excel 전체 복사 → Ctrl+V"></textarea>
+<div class="card">
+<input id="reviewer" class="form-control mb-2" placeholder="리뷰어 이름">
 
-<div class="mt-2 d-flex gap-2">
+<textarea id="paste" class="form-control" rows="5"></textarea>
+
+<div class="mt-2">
 <button class="btn btn-primary btn-sm" onclick="load()">불러오기</button>
-<button class="btn btn-outline-primary btn-sm" onclick="downloadExcel()">엑셀 다운로드</button>
+<button class="btn btn-success btn-sm" onclick="downloadExcel()">엑셀 다운로드</button>
 </div>
 </div>
 
-<div class="card-box">
+<div class="card d-flex gap-2">
+<select id="f-year" onchange="applyFilter()"></select>
+<select id="f-round" onchange="applyFilter()"></select>
+<select id="f-level" onchange="applyFilter()"></select>
+<select id="f-comp" onchange="applyFilter()"></select>
+</div>
+
+<div class="card">
 <table class="table table-hover">
 <thead>
 <tr>
-<th>#</th><th>ID</th><th>제목</th><th>Status</th><th>보기</th>
+<th>#</th><th>ID</th><th>제목</th><th>연도</th>
+<th>차수</th><th>난이도</th><th>Status</th><th>보기</th>
 </tr>
 </thead>
 <tbody id="table"></tbody>
 </table>
 </div>
 
-<!-- 모달 -->
 <div class="modal fade" id="modal">
-<div class="modal-dialog modal-xl modal-dialog-scrollable">
+<div class="modal-dialog modal-xl">
 <div class="modal-content">
 <div class="modal-body" id="modalBody"></div>
 </div>
@@ -104,205 +63,158 @@ placeholder="Excel 전체 복사 → Ctrl+V"></textarea>
 
 <script>
 
-// ✅ TSV 파서 (핵심🔥)
+// ✅ TSV 파서
 function parseTSV(text){
   const rows=[], n=text.length;
   let i=0;
-
   while(i<n){
-    const row=[]; let field=''; let inQuotes=false;
-
+    const row=[]; let field=''; let inQ=false;
     while(i<n){
       const c=text[i];
-
-      if(inQuotes){
-        if(c === '"'){
-          if(text[i+1] === '"'){ field+='"'; i+=2;}
-          else{ inQuotes=false; i++;}
-        } else { field+=c; i++; }
-      }
-      else{
-        if(c === '"'){ inQuotes=true; i++;}
-        else if(c === '\t'){ row.push(field); field=''; i++;}
-        else if(c === '\n'){ row.push(field); i++; break;}
-        else if(c === '\r'){ i++; }
-        else{ field+=c; i++; }
+      if(inQ){
+        if(c=='"'){
+          if(text[i+1]=='"'){field+='"';i+=2;}
+          else{inQ=false;i++;}
+        }else{field+=c;i++;}
+      }else{
+        if(c=='"'){inQ=true;i++;}
+        else if(c=='\t'){row.push(field);field='';i++;}
+        else if(c=='\n'){row.push(field);i++;break;}
+        else if(c=='\r'){i++;}
+        else{field+=c;i++;}
       }
     }
-
-    if(field!=='' || row.length) row.push(field);
+    if(field!==''||row.length) row.push(field);
     if(row.length) rows.push(row);
   }
   return rows;
 }
 
-// ✅ 컬럼 자동 매핑
-function mapKey(k){
-  k=k.replace(/\s/g,'').toLowerCase();
-
-  if(k.includes('문항id')||k==='id') return 'itemId';
-  if(k.includes('문항제목')||k==='제목') return 'title';
-  if(k.includes('문제')) return 'question';
-  if(k.includes('보기1')) return 'opt1';
-  if(k.includes('보기2')) return 'opt2';
-  if(k.includes('보기3')) return 'opt3';
-  if(k.includes('보기4')) return 'opt4';
-  if(k.includes('보기5')) return 'opt5';
-  if(k.includes('정답번호')||k==='정답') return 'answer';
-  if(k.includes('정답해설')) return 'explanation';
-  if(k.includes('status')) return 'status';
-  if(k.includes('comment')) return 'comment';
-
-  return k;
-}
-
 let allItems=[], filteredItems=[];
-let showAnswer=false;
-let currentIdx=0;
+const STATUS_FLOW=['검토','변경','확정','전문가 확정'];
 
 function load(){
-  const raw=document.getElementById('paste').value.trim();
-  if(!raw){ alert('붙여넣기 필요'); return;}
+  const rows=parseTSV(document.getElementById('paste').value);
+  const h=rows[0];
 
-  const rows=parseTSV(raw);
-  const headers=rows[0].map(h=>mapKey(h));
+  function g(k,r){const i=h.indexOf(k); return i>-1?(r[i]||''):"";}
 
-  allItems=rows.slice(1).map(r=>{
-    let obj={};
-    headers.forEach((h,i)=>obj[h]=r[i]||'');
+  allItems=rows.slice(1).map(r=>({
+    itemId:g('문항 ID',r),
+    year:g('출제연도',r),
+    round:g('문항차수',r),
+    competency:g('역량명',r),
+    level:g('문항 난이도',r),
+    title:g('문항 제목',r),
+    question:g('문제',r),
+    opt1:g('보기1',r),
+    opt2:g('보기2',r),
+    opt3:g('보기3',r),
+    opt4:g('보기4',r),
+    opt5:g('보기5',r),
+    answer:g('정답 번호',r),
+    explanation:g('정답 해설',r),
+    status:g('Status',r)||'검토',
+    comment:g('Comment',r),
+    _history:[]
+  }));
 
-    return {
-      itemId:obj.itemId||Math.random(),
-      title:obj.title||'',
-      question:obj.question||'',
-      opt1:obj.opt1||'',
-      opt2:obj.opt2||'',
-      opt3:obj.opt3||'',
-      opt4:obj.opt4||'',
-      opt5:obj.opt5||'',
-      answer:obj.answer||'',
-      explanation:obj.explanation||'',
-      status:obj.status||'검토',
-      comment:obj.comment||''
-    };
-  });
-
+  initFilters();
   render();
 }
 
-function render(){
-  filteredItems=allItems;
-
-  document.getElementById('table').innerHTML=
-  filteredItems.map((r,i)=>`
-<tr>
-<td>${i+1}</td>
-<td>${r.itemId}</td>
-<td>${r.title||'(제목없음)'}</td>
-<td>${statusBadge(r.status)}</td>
-<td><button class="btn btn-outline-primary btn-sm" onclick="showDetail(${i})">보기</button></td>
-</tr>`).join('');
+function unique(k){return [...new Set(allItems.map(x=>x[k]).filter(Boolean))];}
+function fill(id,a){
+  document.getElementById(id).innerHTML='<option value="">전체</option>'+
+  a.map(v=>`<option>${v}</option>`).join('');
 }
+
+function initFilters(){
+  fill('f-year',unique('year'));
+  fill('f-round',unique('round'));
+  fill('f-level',unique('level'));
+  fill('f-comp',unique('competency'));
+}
+
+function applyFilter(){
+  const y=f-year.value,r=f-round.value,l=f-level.value,c=f-comp.value;
+
+  filteredItems=allItems.filter(x=>
+    (!y||x.year===y)&&
+    (!r||x.round===r)&&
+    (!l||x.level===l)&&
+    (!c||x.competency===c)
+  );
+  renderTable();
+}
+
+function render(){filteredItems=allItems;renderTable();}
 
 function statusBadge(s){
   let cls='검토';
-  if(s==='변경') cls='변경';
-  else if(s==='확정') cls='확정';
-  else if(s==='전문가 확정') cls='전문가확정';
-
+  if(s==='변경')cls='변경';
+  if(s==='확정')cls='확정';
+  if(s==='전문가 확정')cls='전문가';
   return `<span class="badge-status ${cls}">${s}</span>`;
 }
 
-function updateField(idx,key,value){
-  filteredItems[idx][key]=value;
-  const id=filteredItems[idx].itemId;
-  const t=allItems.find(x=>x.itemId===id);
-  if(t) t[key]=value;
+function renderTable(){
+  table.innerHTML=filteredItems.map((r,i)=>`
+<tr>
+<td>${i+1}</td>
+<td>${r.itemId}</td>
+<td>${r.title}</td>
+<td>${r.year}</td>
+<td>${r.round}</td>
+<td>${r.level}</td>
+<td>${statusBadge(r.status)}</td>
+<td><button onclick="showDetail(${i})">보기</button></td>
+</tr>`).join('');
 }
 
-function toggleAnswer(){
-  showAnswer=!showAnswer;
-  showDetail(currentIdx);
-}
+function showDetail(i){
+  const r=filteredItems[i];
+  const locked=r.status==='전문가 확정';
 
-function showDetail(idx){
-  currentIdx=idx;
-  const r=filteredItems[idx];
+  modalBody.innerHTML=`
+<h5>${r.title}</h5>
 
-  const opts=[r.opt1,r.opt2,r.opt3,r.opt4,r.opt5].map((o,i)=>`
 <div>
-<label>보기 ${i+1}</label>
-<textarea class="form-control"
- onchange="updateField(${idx},'opt${i+1}',this.value)">${o||''}</textarea>
-</div>`).join('');
+${STATUS_FLOW.map(s=>`
+<button class="btn btn-sm ${s===r.status?'btn-primary':'btn-outline-secondary'}"
+onclick="updateStatus(${i},'${s}')">${s}</button>`).join('')}
+</div>
 
-  document.getElementById('modalBody').innerHTML=`
+<textarea ${locked?'disabled':''} 
+onchange="updateField(${i},'question',this.value)">${r.question}</textarea>
 
-<button class="btn btn-outline-primary mb-2" onclick="toggleAnswer()">
-정답 보기 ${showAnswer?'OFF':'ON'}
-</button>
+<textarea ${locked?'disabled':''} 
+onchange="updateField(${i},'explanation',this.value)">${r.explanation}</textarea>
 
-<div class="section-title">Status</div>
-<select class="form-select"
- onchange="updateField(${idx},'status',this.value)">
-<option ${r.status==='검토'?'selected':''}>검토</option>
-<option ${r.status==='변경'?'selected':''}>변경</option>
-<option ${r.status==='확정'?'selected':''}>확정</option>
-<option ${r.status==='전문가 확정'?'selected':''}>전문가 확정</option>
-</select>
-
-<div class="section-title">문제</div>
-<textarea class="form-control"
- onchange="updateField(${idx},'question',this.value)">${r.question}</textarea>
-
-<div class="section-title">보기</div>
-${opts}
-
-${showAnswer?`
-<div class="section-title">정답</div>
-<div class="answer-box">정답: <b>${r.answer}</b></div>
-` : ''}
-
-<div class="section-title">해설</div>
-<textarea class="form-control"
- onchange="updateField(${idx},'explanation',this.value)">
-${r.explanation}</textarea>
-
-<div class="section-title">코멘트</div>
-<textarea class="form-control"
- onchange="updateField(${idx},'comment',this.value)">
-${r.comment}</textarea>
+<hr>
+<h6>이력</h6>
+${(r._history||[]).map(h=>`
+<div>${h.time} ${h.reviewer} ${h.field}</div>`).join('')}
 `;
 
-  new bootstrap.Modal(document.getElementById('modal')).show();
+  new bootstrap.Modal(modal).show();
 }
 
-function downloadExcel(){
-  const data=allItems.map(r=>({
-    문항ID:r.itemId,
-    문항제목:r.title,
-    문제:r.question,
-    보기1:r.opt1,
-    보기2:r.opt2,
-    보기3:r.opt3,
-    보기4:r.opt4,
-    보기5:r.opt5,
-    정답번호:r.answer,
-    정답해설:r.explanation,
-    Status:r.status,
-    Comment:r.comment
-  }));
-
-  const ws=XLSX.utils.json_to_sheet(data);
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,"리뷰");
-
-  XLSX.writeFile(wb,"PM리뷰.xlsx");
+function log(item,f,o,n){
+  item._history.push({
+    time:new Date().toLocaleString(),
+    reviewer:reviewer.value||'익명',
+    field:f
+  });
 }
 
-</script>
+function updateField(i,k,v){
+  const item=filteredItems[i];
+  if(item.status==='전문가 확정'){alert('수정불가');return;}
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  const old=item[k];
+  item[k]=v;
+  log(item,k,old,v);
 
-</body>
-</html>
+  const t=allItems.find(x=>x.itemId===item.itemId);
+  if(t) t[k]=v;
