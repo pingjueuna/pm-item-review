@@ -2,42 +2,88 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>PM 문제 리뷰 시스템 (안정버전)</title>
+<title>PM 문제 리뷰 시스템</title>
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <style>
-body { background:#f4f6fb; font-size:14px;}
+:root{
+  --primary:#03c75a;
+  --bg:#f5f6f7;
+  --card:#ffffff;
+  --border:#e5e5e5;
+}
+
+body{
+  background:var(--bg);
+  font-size:14px;
+}
+
+.card-box{
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:16px;
+  margin-bottom:15px;
+  box-shadow:0 1px 3px rgba(0,0,0,0.05);
+}
+
+.table{
+  background:#fff;
+}
+
+.table tbody tr:hover{
+  background:#f9fafb;
+}
+
+.btn-primary{
+  background:var(--primary);
+  border:none;
+}
 
 .badge-status{
-  padding:4px 8px;border-radius:10px;font-size:12px;
+  padding:4px 10px;
+  border-radius:12px;
+  font-size:12px;
+  font-weight:600;
 }
-.badge-status.검토{background:#cff4fc;}
-.badge-status.변경{background:#fff3cd;}
-.badge-status.확정{background:#d1e7dd;}
-.badge-status.전문가확정{background:#0d6efd;color:#fff;}
+
+.badge-status.검토{background:#eef9f3;color:#03c75a;}
+.badge-status.변경{background:#fff6e0;color:#d4a017;}
+.badge-status.확정{background:#ecf7ff;color:#0078d4;}
+.badge-status.전문가확정{background:#03c75a;color:#fff;}
 
 .section-title{
-  font-weight:bold;margin:10px 0 5px;
+  font-weight:700;
+  margin-top:12px;
 }
-textarea{width:100%;}
+
+.answer-box{
+  background:#eef6ff;
+  border:1px solid #d6e6ff;
+  padding:10px;
+  border-radius:6px;
+}
 </style>
 </head>
 
 <body class="p-3">
 
-<h4 class="mb-3">PM 문제 리뷰 시스템</h4>
+<h4>PM 문제 리뷰 시스템</h4>
 
+<div class="card-box">
 <textarea id="paste" class="form-control" rows="5"
- placeholder="Excel 전체 복사 → Ctrl+V"></textarea>
+placeholder="Excel 전체 복사 → Ctrl+V"></textarea>
 
-<div class="mt-2">
-  <button class="btn btn-primary btn-sm" onclick="load()">불러오기</button>
-  <button class="btn btn-success btn-sm" onclick="downloadExcel()">엑셀 다운로드</button>
+<div class="mt-2 d-flex gap-2">
+<button class="btn btn-primary btn-sm" onclick="load()">불러오기</button>
+<button class="btn btn-outline-primary btn-sm" onclick="downloadExcel()">엑셀 다운로드</button>
+</div>
 </div>
 
-<table class="table table-bordered mt-3">
+<div class="card-box">
+<table class="table table-hover">
 <thead>
 <tr>
 <th>#</th><th>ID</th><th>제목</th><th>Status</th><th>보기</th>
@@ -45,10 +91,11 @@ textarea{width:100%;}
 </thead>
 <tbody id="table"></tbody>
 </table>
+</div>
 
 <!-- 모달 -->
-<div class="modal fade" id="modal" tabindex="-1">
-<div class="modal-dialog modal-lg modal-dialog-scrollable">
+<div class="modal fade" id="modal">
+<div class="modal-dialog modal-xl modal-dialog-scrollable">
 <div class="modal-content">
 <div class="modal-body" id="modalBody"></div>
 </div>
@@ -57,97 +104,106 @@ textarea{width:100%;}
 
 <script>
 
-// ✅ 전역
-let allItems=[], filteredItems=[];
-let showAnswer=false;
-let currentIdx=0;
+// ✅ TSV 파서 (핵심🔥)
+function parseTSV(text){
+  const rows=[], n=text.length;
+  let i=0;
 
-// ✅ 컬럼 자동 매핑 (핵심🔥)
-function normalize(k){
-  return k.replace(/\s|[\r\n]/g,'').toLowerCase();
+  while(i<n){
+    const row=[]; let field=''; let inQuotes=false;
+
+    while(i<n){
+      const c=text[i];
+
+      if(inQuotes){
+        if(c === '"'){
+          if(text[i+1] === '"'){ field+='"'; i+=2;}
+          else{ inQuotes=false; i++;}
+        } else { field+=c; i++; }
+      }
+      else{
+        if(c === '"'){ inQuotes=true; i++;}
+        else if(c === '\t'){ row.push(field); field=''; i++;}
+        else if(c === '\n'){ row.push(field); i++; break;}
+        else if(c === '\r'){ i++; }
+        else{ field+=c; i++; }
+      }
+    }
+
+    if(field!=='' || row.length) row.push(field);
+    if(row.length) rows.push(row);
+  }
+  return rows;
 }
 
+// ✅ 컬럼 자동 매핑
 function mapKey(k){
-  k = normalize(k);
+  k=k.replace(/\s/g,'').toLowerCase();
 
-  if(k.includes('문항id')) return 'itemId';
-  if(k.includes('id')) return 'itemId';
-
-  if(k.includes('문항제목') || k==='제목') return 'title';
-
+  if(k.includes('문항id')||k==='id') return 'itemId';
+  if(k.includes('문항제목')||k==='제목') return 'title';
   if(k.includes('문제')) return 'question';
-
   if(k.includes('보기1')) return 'opt1';
   if(k.includes('보기2')) return 'opt2';
   if(k.includes('보기3')) return 'opt3';
   if(k.includes('보기4')) return 'opt4';
   if(k.includes('보기5')) return 'opt5';
-
-  if(k.includes('정답번호') || k==='정답') return 'answer';
-
+  if(k.includes('정답번호')||k==='정답') return 'answer';
   if(k.includes('정답해설')) return 'explanation';
-
-  if(k.includes('status') || k.includes('상태')) return 'status';
-
+  if(k.includes('status')) return 'status';
   if(k.includes('comment')) return 'comment';
 
   return k;
 }
 
-// ✅ 데이터 로드
+let allItems=[], filteredItems=[];
+let showAnswer=false;
+let currentIdx=0;
+
 function load(){
-  const raw = document.getElementById('paste').value.trim();
-  if(!raw){
-    alert('데이터를 붙여넣어주세요');
-    return;
-  }
+  const raw=document.getElementById('paste').value.trim();
+  if(!raw){ alert('붙여넣기 필요'); return;}
 
-  const rows = raw.split("\n").map(r=>r.split("\t"));
-  const headers = rows[0].map(h=>mapKey(h));
+  const rows=parseTSV(raw);
+  const headers=rows[0].map(h=>mapKey(h));
 
-  allItems = rows.slice(1).map(row=>{
+  allItems=rows.slice(1).map(r=>{
     let obj={};
-
-    headers.forEach((h,i)=>{
-      obj[h] = row[i] ? row[i].trim() : '';
-    });
+    headers.forEach((h,i)=>obj[h]=r[i]||'');
 
     return {
-      itemId: obj.itemId || Math.random(),
-      title: obj.title || '',
-      question: obj.question || '',
-      opt1: obj.opt1 || '',
-      opt2: obj.opt2 || '',
-      opt3: obj.opt3 || '',
-      opt4: obj.opt4 || '',
-      opt5: obj.opt5 || '',
-      answer: obj.answer || '',
-      explanation: obj.explanation || '',
-      status: obj.status || '검토',
-      comment: obj.comment || ''
+      itemId:obj.itemId||Math.random(),
+      title:obj.title||'',
+      question:obj.question||'',
+      opt1:obj.opt1||'',
+      opt2:obj.opt2||'',
+      opt3:obj.opt3||'',
+      opt4:obj.opt4||'',
+      opt5:obj.opt5||'',
+      answer:obj.answer||'',
+      explanation:obj.explanation||'',
+      status:obj.status||'검토',
+      comment:obj.comment||''
     };
   });
 
   render();
 }
 
-// ✅ 테이블 그리기
 function render(){
-  filteredItems = allItems;
+  filteredItems=allItems;
 
-  document.getElementById('table').innerHTML =
-    filteredItems.map((r,i)=>`
+  document.getElementById('table').innerHTML=
+  filteredItems.map((r,i)=>`
 <tr>
 <td>${i+1}</td>
 <td>${r.itemId}</td>
-<td>${r.title || '(제목없음)'}</td>
+<td>${r.title||'(제목없음)'}</td>
 <td>${statusBadge(r.status)}</td>
-<td><button class="btn btn-sm btn-outline-primary" onclick="showDetail(${i})">보기</button></td>
-</tr>
-`).join('');
+<td><button class="btn btn-outline-primary btn-sm" onclick="showDetail(${i})">보기</button></td>
+</tr>`).join('');
 }
 
-// ✅ 상태 badge
 function statusBadge(s){
   let cls='검토';
   if(s==='변경') cls='변경';
@@ -157,22 +213,18 @@ function statusBadge(s){
   return `<span class="badge-status ${cls}">${s}</span>`;
 }
 
-// ✅ 데이터 수정
-function updateField(idx,key,val){
-  filteredItems[idx][key]=val;
-
+function updateField(idx,key,value){
+  filteredItems[idx][key]=value;
   const id=filteredItems[idx].itemId;
-  const target=allItems.find(x=>x.itemId===id);
-  if(target) target[key]=val;
+  const t=allItems.find(x=>x.itemId===id);
+  if(t) t[key]=value;
 }
 
-// ✅ 정답 토글
 function toggleAnswer(){
   showAnswer=!showAnswer;
   showDetail(currentIdx);
 }
 
-// ✅ 상세보기
 function showDetail(idx){
   currentIdx=idx;
   const r=filteredItems[idx];
@@ -180,48 +232,53 @@ function showDetail(idx){
   const opts=[r.opt1,r.opt2,r.opt3,r.opt4,r.opt5].map((o,i)=>`
 <div>
 <label>보기 ${i+1}</label>
-<textarea onchange="updateField(${idx},'opt${i+1}',this.value)">${o||''}</textarea>
+<textarea class="form-control"
+ onchange="updateField(${idx},'opt${i+1}',this.value)">${o||''}</textarea>
 </div>`).join('');
 
   document.getElementById('modalBody').innerHTML=`
 
-<button class="btn btn-sm btn-outline-dark mb-2"
- onclick="toggleAnswer()">정답보기 ${showAnswer?'OFF':'ON'}</button>
+<button class="btn btn-outline-primary mb-2" onclick="toggleAnswer()">
+정답 보기 ${showAnswer?'OFF':'ON'}
+</button>
 
 <div class="section-title">Status</div>
-<select class="form-select mb-2"
+<select class="form-select"
  onchange="updateField(${idx},'status',this.value)">
-  <option ${r.status==='검토'?'selected':''}>검토</option>
-  <option ${r.status==='변경'?'selected':''}>변경</option>
-  <option ${r.status==='확정'?'selected':''}>확정</option>
-  <option ${r.status==='전문가 확정'?'selected':''}>전문가 확정</option>
+<option ${r.status==='검토'?'selected':''}>검토</option>
+<option ${r.status==='변경'?'selected':''}>변경</option>
+<option ${r.status==='확정'?'selected':''}>확정</option>
+<option ${r.status==='전문가 확정'?'selected':''}>전문가 확정</option>
 </select>
 
 <div class="section-title">문제</div>
-<textarea onchange="updateField(${idx},'question',this.value)">${r.question}</textarea>
+<textarea class="form-control"
+ onchange="updateField(${idx},'question',this.value)">${r.question}</textarea>
 
 <div class="section-title">보기</div>
 ${opts}
 
-${showAnswer ? `
+${showAnswer?`
 <div class="section-title">정답</div>
-<div class="alert alert-info">정답: ${r.answer}</div>
+<div class="answer-box">정답: <b>${r.answer}</b></div>
 ` : ''}
 
-<div class="section-title">정답 해설</div>
-<textarea onchange="updateField(${idx},'explanation',this.value)">${r.explanation}</textarea>
+<div class="section-title">해설</div>
+<textarea class="form-control"
+ onchange="updateField(${idx},'explanation',this.value)">
+${r.explanation}</textarea>
 
-<div class="section-title">리뷰 코멘트</div>
-<textarea onchange="updateField(${idx},'comment',this.value)">${r.comment}</textarea>
-
+<div class="section-title">코멘트</div>
+<textarea class="form-control"
+ onchange="updateField(${idx},'comment',this.value)">
+${r.comment}</textarea>
 `;
 
   new bootstrap.Modal(document.getElementById('modal')).show();
 }
 
-// ✅ Excel 다운로드
 function downloadExcel(){
-  const data = allItems.map(r=>({
+  const data=allItems.map(r=>({
     문항ID:r.itemId,
     문항제목:r.title,
     문제:r.question,
@@ -236,11 +293,11 @@ function downloadExcel(){
     Comment:r.comment
   }));
 
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "결과");
+  const ws=XLSX.utils.json_to_sheet(data);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"리뷰");
 
-  XLSX.writeFile(wb, "PM_리뷰결과.xlsx");
+  XLSX.writeFile(wb,"PM리뷰.xlsx");
 }
 
 </script>
