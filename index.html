@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>PM 리뷰 시스템 (최종)</title>
+<title>PM 리뷰 시스템_ver1.2</title>
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -11,11 +11,6 @@
 body{background:#f5f6f7;font-size:14px}
 .card{background:#fff;padding:14px;border-radius:8px;margin-bottom:10px}
 .table tbody tr:hover{background:#f9fafb}
-.badge-status{padding:4px 8px;border-radius:10px;font-size:12px}
-.badge-status.검토{background:#eef9f3;color:#03c75a}
-.badge-status.변경{background:#fff6e0}
-.badge-status.확정{background:#e7f1ff}
-.badge-status.전문가{background:#03c75a;color:#fff}
 </style>
 </head>
 
@@ -24,9 +19,8 @@ body{background:#f5f6f7;font-size:14px}
 <h4>PM 문제 리뷰 시스템</h4>
 
 <div class="card">
-<input id="reviewer" class="form-control mb-2" placeholder="리뷰어 이름">
-
-<textarea id="paste" class="form-control" rows="5"></textarea>
+<textarea id="paste" class="form-control" rows="6"
+placeholder="엑셀 전체 복사 → Ctrl+V"></textarea>
 
 <div class="mt-2">
 <button class="btn btn-primary btn-sm" onclick="load()">불러오기</button>
@@ -34,31 +28,17 @@ body{background:#f5f6f7;font-size:14px}
 </div>
 </div>
 
-<div class="card d-flex gap-2">
-<select id="f-year" onchange="applyFilter()"></select>
-<select id="f-round" onchange="applyFilter()"></select>
-<select id="f-level" onchange="applyFilter()"></select>
-<select id="f-comp" onchange="applyFilter()"></select>
-</div>
-
 <div class="card">
 <table class="table table-hover">
 <thead>
 <tr>
-<th>#</th><th>ID</th><th>제목</th><th>연도</th>
-<th>차수</th><th>난이도</th><th>Status</th><th>보기</th>
+<th>#</th><th>ID</th><th>제목</th>
+<th>연도</th><th>차수</th><th>난이도</th>
+<th>Status</th><th>보기</th>
 </tr>
 </thead>
 <tbody id="table"></tbody>
 </table>
-</div>
-
-<div class="modal fade" id="modal">
-<div class="modal-dialog modal-xl">
-<div class="modal-content">
-<div class="modal-body" id="modalBody"></div>
-</div>
-</div>
 </div>
 
 <script>
@@ -90,76 +70,49 @@ function parseTSV(text){
   return rows;
 }
 
-let allItems=[], filteredItems=[];
-const STATUS_FLOW=['검토','변경','확정','전문가 확정'];
+// ✅ 헤더 normalize (핵심🔥)
+function norm(s){
+  return s.replace(/\s/g,'').replace(/\n/g,'').trim();
+}
 
+let allItems=[];
+
+// ✅ load (완전 수정)
 function load(){
-  const rows=parseTSV(document.getElementById('paste').value);
-  const h=rows[0];
+  const raw=document.getElementById('paste').value.trim();
+  if(!raw){ alert('붙여넣기 필요'); return;}
 
-  function g(k,r){const i=h.indexOf(k); return i>-1?(r[i]||''):"";}
+  const rows=parseTSV(raw);
 
-  allItems=rows.slice(1).map(r=>({
-    itemId:g('문항 ID',r),
-    year:g('출제연도',r),
-    round:g('문항차수',r),
-    competency:g('역량명',r),
-    level:g('문항 난이도',r),
-    title:g('문항 제목',r),
-    question:g('문제',r),
-    opt1:g('보기1',r),
-    opt2:g('보기2',r),
-    opt3:g('보기3',r),
-    opt4:g('보기4',r),
-    opt5:g('보기5',r),
-    answer:g('정답 번호',r),
-    explanation:g('정답 해설',r),
-    status:g('Status',r)||'검토',
-    comment:g('Comment',r),
-    _history:[]
+  const headers=rows[0].map(h=>norm(h));
+
+  function get(key, row){
+    const idx = headers.findIndex(h => h.includes(key));
+    return idx>-1 ? (row[idx]||'').trim() : '';
+  }
+
+  allItems = rows.slice(1).map(r=>({
+    itemId: get('문항ID',r),
+    year: get('출제연도',r),
+    round: get('문항차수',r),
+    level: get('난이도',r),
+    competency: get('역량명',r),
+
+    title: get('문항제목',r),
+    question: get('문제',r),
+
+    answer: get('정답',r),
+    explanation: get('해설',r),
+
+    status: get('status',r) || '검토'
   }));
 
-  initFilters();
   render();
 }
 
-function unique(k){return [...new Set(allItems.map(x=>x[k]).filter(Boolean))];}
-function fill(id,a){
-  document.getElementById(id).innerHTML='<option value="">전체</option>'+
-  a.map(v=>`<option>${v}</option>`).join('');
-}
-
-function initFilters(){
-  fill('f-year',unique('year'));
-  fill('f-round',unique('round'));
-  fill('f-level',unique('level'));
-  fill('f-comp',unique('competency'));
-}
-
-function applyFilter(){
-  const y=f-year.value,r=f-round.value,l=f-level.value,c=f-comp.value;
-
-  filteredItems=allItems.filter(x=>
-    (!y||x.year===y)&&
-    (!r||x.round===r)&&
-    (!l||x.level===l)&&
-    (!c||x.competency===c)
-  );
-  renderTable();
-}
-
-function render(){filteredItems=allItems;renderTable();}
-
-function statusBadge(s){
-  let cls='검토';
-  if(s==='변경')cls='변경';
-  if(s==='확정')cls='확정';
-  if(s==='전문가 확정')cls='전문가';
-  return `<span class="badge-status ${cls}">${s}</span>`;
-}
-
-function renderTable(){
-  table.innerHTML=filteredItems.map((r,i)=>`
+// ✅ table
+function render(){
+  table.innerHTML = allItems.map((r,i)=>`
 <tr>
 <td>${i+1}</td>
 <td>${r.itemId}</td>
@@ -167,54 +120,48 @@ function renderTable(){
 <td>${r.year}</td>
 <td>${r.round}</td>
 <td>${r.level}</td>
-<td>${statusBadge(r.status)}</td>
+<td>${r.status}</td>
 <td><button onclick="showDetail(${i})">보기</button></td>
-</tr>`).join('');
+</tr>
+`).join('');
 }
 
+// ✅ 상세
 function showDetail(i){
-  const r=filteredItems[i];
-  const locked=r.status==='전문가 확정';
+  const r=allItems[i];
 
-  modalBody.innerHTML=`
-<h5>${r.title}</h5>
+  alert(
+`제목: ${r.title}
 
-<div>
-${STATUS_FLOW.map(s=>`
-<button class="btn btn-sm ${s===r.status?'btn-primary':'btn-outline-secondary'}"
-onclick="updateStatus(${i},'${s}')">${s}</button>`).join('')}
-</div>
+문제:
+${r.question}
 
-<textarea ${locked?'disabled':''} 
-onchange="updateField(${i},'question',this.value)">${r.question}</textarea>
-
-<textarea ${locked?'disabled':''} 
-onchange="updateField(${i},'explanation',this.value)">${r.explanation}</textarea>
-
-<hr>
-<h6>이력</h6>
-${(r._history||[]).map(h=>`
-<div>${h.time} ${h.reviewer} ${h.field}</div>`).join('')}
-`;
-
-  new bootstrap.Modal(modal).show();
+정답: ${r.answer}
+`);
 }
 
-function log(item,f,o,n){
-  item._history.push({
-    time:new Date().toLocaleString(),
-    reviewer:reviewer.value||'익명',
-    field:f
-  });
+// ✅ 엑셀 다운로드
+function downloadExcel(){
+  const data=allItems.map(r=>({
+    문항ID:r.itemId,
+    출제연도:r.year,
+    문항차수:r.round,
+    난이도:r.level,
+    제목:r.title,
+    문제:r.question,
+    정답:r.answer,
+    해설:r.explanation,
+    Status:r.status
+  }));
+
+  const ws=XLSX.utils.json_to_sheet(data);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"리뷰");
+
+  XLSX.writeFile(wb,"PM_리뷰결과.xlsx");
 }
 
-function updateField(i,k,v){
-  const item=filteredItems[i];
-  if(item.status==='전문가 확정'){alert('수정불가');return;}
+</script>
 
-  const old=item[k];
-  item[k]=v;
-  log(item,k,old,v);
-
-  const t=allItems.find(x=>x.itemId===item.itemId);
-  if(t) t[k]=v;
+</body>
+</html>
