@@ -1,151 +1,184 @@
-<!-- ✅ 중요: 변경된 JS 부분 중심, 기존 코드에 덮어쓰기 -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>PM 문제 리뷰 시스템</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+body { background:#f4f6fb; font-size:14px;}
+.badge-status{padding:3px 8px;border-radius:10px;font-size:12px;}
+.badge-status.검토{background:#cff4fc;}
+.badge-status.변경{background:#fff3cd;}
+.badge-status.확정{background:#d1e7dd;}
+.badge-status.전문가확정{background:#0d6efd;color:#fff;}
+.section-title{font-weight:bold;margin-bottom:6px;}
+textarea{width:100%;}
+</style>
+</head>
+
+<body class="p-3">
+
+<h4>PM 문제 리뷰 시스템</h4>
+
+<textarea id="paste" placeholder="Excel 붙여넣기"></textarea>
+<button onclick="load()">불러오기</button>
+<button onclick="downloadExcel()">엑셀다운로드</button>
+
+<table class="table mt-3">
+<thead>
+<tr>
+<th>#</th><th>ID</th><th>제목</th><th>Status</th><th>보기</th>
+</tr>
+</thead>
+<tbody id="table"></tbody>
+</table>
+
+<!-- 모달 -->
+<div class="modal fade" id="modal" tabindex="-1">
+<div class="modal-dialog modal-lg">
+<div class="modal-content">
+<div class="modal-body" id="modalBody"></div>
+</div>
+</div>
+</div>
+
 <script>
 
-let showAnswer = false;
-let currentIdx = 0;
+let allItems=[], filteredItems=[];
+let showAnswer=false;
+let currentIdx=0;
 
-// ✅ 수정 함수
-function updateField(idx, key, value){
-  const item = filteredItems[idx];
-  item[key] = value;
+function load(){
+  const rows=document.getElementById('paste').value.split("\n").map(r=>r.split("\t"));
+  const headers=rows[0];
 
-  const target = allItems.find(r => r.itemId === item.itemId);
-  if(target){
-    target[key] = value;
-  }
+  allItems=rows.slice(1).map(r=>{
+    let obj={};
+    headers.forEach((h,i)=>obj[h]=r[i]||'');
+    obj.itemId=obj['문항ID']||Math.random();
+    return {
+      itemId:obj.itemId,
+      title:obj['문항제목'],
+      question:obj['문제'],
+      opt1:obj['보기1'],
+      opt2:obj['보기2'],
+      opt3:obj['보기3'],
+      opt4:obj['보기4'],
+      opt5:obj['보기5'],
+      answer:obj['정답번호'],
+      explanation:obj['정답해설'],
+      status:obj['Status']||'검토',
+      comment:obj['Comment']||''
+    };
+  });
 
-  item._edited = true;
+  render();
 }
 
-// ✅ 정답 토글
-function toggleAnswer(){
-  showAnswer = !showAnswer;
-  showDetail(currentIdx);
+function render(){
+  filteredItems=allItems;
+  document.getElementById('table').innerHTML=
+    filteredItems.map((r,i)=>`
+<tr>
+<td>${i+1}</td>
+<td>${r.itemId}</td>
+<td>${r.title}</td>
+<td>${statusBadge(r.status)}</td>
+<td><button onclick="showDetail(${i})">보기</button></td>
+</tr>`).join('');
 }
 
-// ✅ Status 배지 수정
 function statusBadge(s){
-  let cls='other';
-
+  let cls='검토';
   if(s==='변경') cls='변경';
   else if(s==='확정') cls='확정';
   else if(s==='전문가 확정') cls='전문가확정';
-  else if(s.includes('검토')) cls='검토';
-
-  return `<span class="badge-status ${cls}">${esc(s)}</span>`;
+  return `<span class="badge-status ${cls}">${s}</span>`;
 }
 
-// ✅ 상세보기 전체 (핵심 수정됨)
+function updateField(idx,key,val){
+  filteredItems[idx][key]=val;
+  const id=filteredItems[idx].itemId;
+  allItems.find(x=>x.itemId===id)[key]=val;
+}
+
+function toggleAnswer(){
+  showAnswer=!showAnswer;
+  showDetail(currentIdx);
+}
+
 function showDetail(idx){
-  currentIdx = idx;
-  const r = filteredItems[idx];
+  currentIdx=idx;
+  const r=filteredItems[idx];
 
-  document.getElementById('modal-title').textContent = r.title || '문항 상세';
-
-  const answers = (r.answer || '')
-    .split(/[,，、\s]+/)
-    .map(a => a.trim())
-    .filter(Boolean);
-
-  // ✅ 보기 (정답 숨김)
-  const opts = [r.opt1,r.opt2,r.opt3,r.opt4,r.opt5].map((o,i)=>{
-    return `
-    <div class="mb-2">
-      <label style="font-size:12px;font-weight:600;">보기 ${i+1}</label>
-      <textarea class="form-control"
-        rows="2"
-        onchange="updateField(${idx}, 'opt${i+1}', this.value)">${esc(o||'')}</textarea>
-    </div>`;
-  }).join('');
-
-  document.getElementById('modal-body').innerHTML = `
-
-    <div class="d-flex gap-2 mb-3">
-      ${statusBadge(r.status||'')}
-      <button class="btn btn-sm btn-outline-primary" onclick="toggleAnswer()">
-        정답 보기 ${showAnswer ? 'OFF':'ON'}
-      </button>
+  const options=[r.opt1,r.opt2,r.opt3,r.opt4,r.opt5].map((o,i)=>`
+    <div>
+      <label>보기 ${i+1}</label>
+      <textarea onchange="updateField(${idx},'opt${i+1}',this.value)">${o||''}</textarea>
     </div>
+  `).join('');
 
-    <!-- ✅ Status 수정 -->
-    <div class="mb-3">
-      <div class="section-title">Status</div>
-      <select class="form-select"
-        onchange="updateField(${idx}, 'status', this.value)">
-        <option ${r.status==='검토'?'selected':''}>검토</option>
-        <option ${r.status==='변경'?'selected':''}>변경</option>
-        <option ${r.status==='확정'?'selected':''}>확정</option>
-        <option ${r.status==='전문가 확정'?'selected':''}>전문가 확정</option>
-      </select>
-    </div>
+  document.getElementById('modalBody').innerHTML=`
 
-    <!-- ✅ 문제 수정 -->
-    <div class="mb-3">
-      <div class="section-title">문제</div>
-      <textarea class="form-control"
-        rows="6"
-        onchange="updateField(${idx}, 'question', this.value)">${esc(r.question||'')}</textarea>
-    </div>
+  <button onclick="toggleAnswer()">정답보기 ${showAnswer?'OFF':'ON'}</button>
 
-    <!-- ✅ 보기 수정 -->
-    <div class="mb-3">
-      <div class="section-title">보기</div>
-      ${opts}
-    </div>
+  <div class="section-title">Status</div>
+  <select onchange="updateField(${idx},'status',this.value)">
+    <option ${r.status==='검토'?'selected':''}>검토</option>
+    <option ${r.status==='변경'?'selected':''}>변경</option>
+    <option ${r.status==='확정'?'selected':''}>확정</option>
+    <option ${r.status==='전문가 확정'?'selected':''}>전문가 확정</option>
+  </select>
 
-    <!-- ✅ 정답 (하단 표시) -->
-    ${showAnswer ? `
-    <div class="mb-3">
-      <div class="section-title">정답</div>
-      <div class="explanation-box" style="background:#e7f1ff;">
-        정답: <b>${esc(r.answer||'-')}</b>
-      </div>
-    </div>` : ''}
+  <div class="section-title">문제</div>
+  <textarea onchange="updateField(${idx},'question',this.value)">${r.question||''}</textarea>
 
-    <!-- ✅ 해설 수정 -->
-    <div class="mb-3">
-      <div class="section-title">정답 해설</div>
-      <textarea class="form-control"
-        rows="5"
-        onchange="updateField(${idx}, 'explanation', this.value)">${esc(r.explanation||'')}</textarea>
-    </div>
+  <div class="section-title">보기</div>
+  ${options}
 
-    <!-- ✅ 리뷰 코멘트 -->
-    <div class="mb-3">
-      <div class="section-title">리뷰 코멘트</div>
-      <textarea class="form-control"
-        rows="3"
-        placeholder="리뷰 의견"
-        onchange="updateField(${idx}, 'comment', this.value)">${esc(r.comment||'')}</textarea>
-    </div>
+  ${showAnswer?`
+  <div class="section-title">정답</div>
+  <div>정답: ${r.answer}</div>
+  `:''}
+
+  <div class="section-title">해설</div>
+  <textarea onchange="updateField(${idx},'explanation',this.value)">${r.explanation||''}</textarea>
+
+  <div class="section-title">리뷰 코멘트</div>
+  <textarea onchange="updateField(${idx},'comment',this.value)">${r.comment||''}</textarea>
 
   `;
 
-  detailModal.show();
+  new bootstrap.Modal(document.getElementById('modal')).show();
 }
 
-
-// ✅ Excel 다운로드
 function downloadExcel(){
-  const exportData = allItems.map(r => ({
-    '문항ID': r.itemId || '',
-    'Status': r.status || '',
-    '문제': r.question || '',
-    '보기1': r.opt1 || '',
-    '보기2': r.opt2 || '',
-    '보기3': r.opt3 || '',
-    '보기4': r.opt4 || '',
-    '보기5': r.opt5 || '',
-    '정답번호': r.answer || '',
-    '정답해설': r.explanation || '',
-    'Comment': r.comment || ''
+  const data=allItems.map(r=>({
+    문항ID:r.itemId,
+    Status:r.status,
+    문제:r.question,
+    보기1:r.opt1,
+    보기2:r.opt2,
+    보기3:r.opt3,
+    보기4:r.opt4,
+    보기5:r.opt5,
+    정답번호:r.answer,
+    정답해설:r.explanation,
+    Comment:r.comment
   }));
 
-  const ws = XLSX.utils.json_to_sheet(exportData);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "리뷰결과");
-
-  XLSX.writeFile(wb, "PM_문항_리뷰결과.xlsx");
+  const ws=XLSX.utils.json_to_sheet(data);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"sheet1");
+  XLSX.writeFile(wb,"PM리뷰결과.xlsx");
 }
 
 </script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>
