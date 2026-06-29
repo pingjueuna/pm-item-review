@@ -1,167 +1,243 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<title>PM 리뷰 시스템_ver1.2</title>
-
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
+<meta charset="UTF-8" />
+<title>문항 리스트</title>
 <style>
-body{background:#f5f6f7;font-size:14px}
-.card{background:#fff;padding:14px;border-radius:8px;margin-bottom:10px}
-.table tbody tr:hover{background:#f9fafb}
+  body { margin:0; background:#f5f6f7; font-family:"Noto Sans KR", Arial, sans-serif; color:#222; }
+  .wrap { max-width:1400px; margin:30px auto; padding:0 20px; }
+  h1 { font-size:22px; color:#03c75a; }
+
+  textarea {
+    width:100%; height:230px; border:1px solid #d5d8dc; border-radius:8px;
+    padding:14px; font-size:14px; box-sizing:border-box; background:#fff;
+  }
+
+  .btn-main {
+    margin-top:12px; background:#03c75a; color:#fff; border:0; border-radius:6px;
+    padding:11px 22px; font-size:15px; font-weight:700; cursor:pointer;
+  }
+
+  .card, .detail-box {
+    margin-top:24px; background:#fff; border:1px solid #dfe3e8; border-radius:8px;
+  }
+
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { padding:13px 10px; border-bottom:1px solid #e5e8eb; text-align:center; }
+  th { font-weight:700; }
+  td.title { text-align:left; font-weight:600; }
+
+  .view-btn {
+    border:1px solid #222; background:#fff; padding:5px 12px;
+    cursor:pointer; font-weight:600;
+  }
+
+  .view-btn:hover { background:#f1f3f5; }
+
+  .detail-box { padding:28px; }
+  .detail-box h2 { color:#03c75a; margin-top:0; }
+  .detail-id { color:#666; margin-bottom:20px; font-size:14px; }
+
+  .question {
+    font-size:17px; line-height:1.7; margin-bottom:22px; white-space:pre-wrap;
+  }
+
+  .choice {
+    padding:11px 14px; border:1px solid #e1e4e8; border-radius:6px;
+    margin-bottom:8px; background:#fafafa;
+  }
+
+  .answer {
+    margin-top:22px; padding:18px; background:#f0fff7;
+    border:1px solid #b7ebcd; border-radius:8px;
+  }
+
+  .answer strong { color:#03c75a; }
 </style>
 </head>
 
-<body class="p-3">
+<body>
+<div class="wrap">
+  <h1>문항 리스트 생성기</h1>
 
-<h4>PM 문제 리뷰 시스템</h4>
+  <textarea id="excelInput" placeholder="엑셀 내용을 그대로 붙여넣으세요."></textarea>
+  <br />
+  <button class="btn-main" onclick="makeList()">리스트 생성</button>
 
-<div class="card">
-<textarea id="paste" class="form-control" rows="6"
-placeholder="엑셀 전체 복사 → Ctrl+V"></textarea>
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>ID</th>
+          <th>제목</th>
+          <th>연도</th>
+          <th>차수</th>
+          <th>난이도</th>
+          <th>Status</th>
+          <th>보기</th>
+        </tr>
+      </thead>
+      <tbody id="listBody"></tbody>
+    </table>
+  </div>
 
-<div class="mt-2">
-<button class="btn btn-primary btn-sm" onclick="load()">불러오기</button>
-<button class="btn btn-success btn-sm" onclick="downloadExcel()">엑셀 다운로드</button>
-</div>
-</div>
-
-<div class="card">
-<table class="table table-hover">
-<thead>
-<tr>
-<th>#</th><th>ID</th><th>제목</th>
-<th>연도</th><th>차수</th><th>난이도</th>
-<th>Status</th><th>보기</th>
-</tr>
-</thead>
-<tbody id="table"></tbody>
-</table>
+  <div id="detailBox"></div>
 </div>
 
 <script>
+let questionData = [];
 
-// ✅ TSV 파서
-function parseTSV(text){
-  const rows=[], n=text.length;
-  let i=0;
-  while(i<n){
-    const row=[]; let field=''; let inQ=false;
-    while(i<n){
-      const c=text[i];
-      if(inQ){
-        if(c=='"'){
-          if(text[i+1]=='"'){field+='"';i+=2;}
-          else{inQ=false;i++;}
-        }else{field+=c;i++;}
-      }else{
-        if(c=='"'){inQ=true;i++;}
-        else if(c=='\t'){row.push(field);field='';i++;}
-        else if(c=='\n'){row.push(field);i++;break;}
-        else if(c=='\r'){i++;}
-        else{field+=c;i++;}
+function normalizeKey(key) {
+  return String(key || "")
+    .replace(/\r?\n/g, " ")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+function escapeHtml(text) {
+  return String(text || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function parseExcelText(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (ch === '"') {
+      if (inQuotes && next === '"') {
+        cell += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
       }
+    } else if (ch === "\t" && !inQuotes) {
+      row.push(cell.trim());
+      cell = "";
+    } else if ((ch === "\n" || ch === "\r") && !inQuotes) {
+      if (ch === "\r" && next === "\n") i++;
+      row.push(cell.trim());
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += ch;
     }
-    if(field!==''||row.length) row.push(field);
-    if(row.length) rows.push(row);
-  }
-  return rows;
-}
-
-// ✅ 헤더 normalize (핵심🔥)
-function norm(s){
-  return s.replace(/\s/g,'').replace(/\n/g,'').trim();
-}
-
-let allItems=[];
-
-// ✅ load (완전 수정)
-function load(){
-  const raw=document.getElementById('paste').value.trim();
-  if(!raw){ alert('붙여넣기 필요'); return;}
-
-  const rows=parseTSV(raw);
-
-  const headers=rows[0].map(h=>norm(h));
-
-  function get(key, row){
-    const idx = headers.findIndex(h => h.includes(key));
-    return idx>-1 ? (row[idx]||'').trim() : '';
   }
 
-  allItems = rows.slice(1).map(r=>({
-    itemId: get('문항ID',r),
-    year: get('출제연도',r),
-    round: get('문항차수',r),
-    level: get('난이도',r),
-    competency: get('역량명',r),
+  if (cell || row.length) {
+    row.push(cell.trim());
+    rows.push(row);
+  }
 
-    title: get('문항제목',r),
-    question: get('문제',r),
-
-    answer: get('정답',r),
-    explanation: get('해설',r),
-
-    status: get('status',r) || '검토'
-  }));
-
-  render();
+  return rows.filter(r => r.some(c => String(c).trim() !== ""));
 }
 
-// ✅ table
-function render(){
-  table.innerHTML = allItems.map((r,i)=>`
-<tr>
-<td>${i+1}</td>
-<td>${r.itemId}</td>
-<td>${r.title}</td>
-<td>${r.year}</td>
-<td>${r.round}</td>
-<td>${r.level}</td>
-<td>${r.status}</td>
-<td><button onclick="showDetail(${i})">보기</button></td>
-</tr>
-`).join('');
+function makeList() {
+  const input = document.getElementById("excelInput").value;
+
+  if (!input.trim()) {
+    alert("엑셀 데이터를 붙여넣어 주세요.");
+    return;
+  }
+
+  const rows = parseExcelText(input);
+
+  if (rows.length < 2) {
+    alert("헤더와 데이터 행을 함께 붙여넣어 주세요.");
+    return;
+  }
+
+  const headers = rows[0].map(normalizeKey);
+  const dataRows = rows.slice(1);
+
+  questionData = dataRows.map(row => {
+    const obj = {};
+    headers.forEach((h, i) => {
+      obj[h] = row[i] || "";
+    });
+    return obj;
+  });
+
+  const tbody = document.getElementById("listBody");
+  document.getElementById("detailBox").innerHTML = "";
+  tbody.innerHTML = "";
+
+  questionData.forEach((q, idx) => {
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td>${idx + 1}</td>
+      <td>${escapeHtml(q["문항ID"])}</td>
+      <td class="title">${escapeHtml(q["문항제목"])}</td>
+      <td>${escapeHtml(q["출제연도"])}</td>
+      <td>${escapeHtml(q["문항차수"])}</td>
+      <td>${escapeHtml(q["문항난이도"])}</td>
+      <td>${escapeHtml(q["Status"])}</td>
+      <td><button class="view-btn" onclick="openQuestion(${idx})">보기</button></td>
+    `;
+
+    tbody.appendChild(tr);
+  });
 }
 
-// ✅ 상세
-function showDetail(i){
-  const r=allItems[i];
+function openQuestion(index) {
+  const q = questionData[index];
+  const detailBox = document.getElementById("detailBox");
 
-  alert(
-`제목: ${r.title}
+  const choices = [1, 2, 3, 4, 5].map(n => {
+    const value = q["보기" + n];
+    if (!value || value === "N.A") return "";
+    return `<div class="choice">${escapeHtml(value)}</div>`;
+  }).join("");
 
-문제:
-${r.question}
+  detailBox.innerHTML = `
+    <div class="detail-box">
+      <h2>${escapeHtml(q["문항제목"])}</h2>
 
-정답: ${r.answer}
-`);
+      <div class="detail-id">
+        문항 ID: ${escapeHtml(q["문항ID"])}
+      </div>
+
+      <div class="question">${escapeHtml(q["문제"])}</div>
+
+      ${choices}
+
+      <button class="btn-main" onclick="showAnswer(${index})">
+        정답 보기
+      </button>
+
+      <div id="answerArea"></div>
+    </div>
+  `;
+
+  detailBox.scrollIntoView({ behavior: "smooth" });
 }
 
-// ✅ 엑셀 다운로드
-function downloadExcel(){
-  const data=allItems.map(r=>({
-    문항ID:r.itemId,
-    출제연도:r.year,
-    문항차수:r.round,
-    난이도:r.level,
-    제목:r.title,
-    문제:r.question,
-    정답:r.answer,
-    해설:r.explanation,
-    Status:r.status
-  }));
+function showAnswer(index) {
+  const q = questionData[index];
+  const answerArea = document.getElementById("answerArea");
 
-  const ws=XLSX.utils.json_to_sheet(data);
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,"리뷰");
-
-  XLSX.writeFile(wb,"PM_리뷰결과.xlsx");
+  answerArea.innerHTML = `
+    <div class="answer">
+      <p><strong>정답 번호:</strong> ${escapeHtml(q["정답번호"])}</p>
+      <p>
+        <strong>정답 해설:</strong><br>
+        ${escapeHtml(q["정답해설"]).replace(/\n/g, "<br>")}
+      </p>
+    </div>
+  `;
 }
-
 </script>
-
 </body>
 </html>
