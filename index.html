@@ -58,7 +58,7 @@
 
 <body>
 <div class="wrap">
-  <h1>문항 리스트 생성기</h1>
+  <h1>문항 리스트 뷰어</h1>
 
   <textarea id="excelInput" placeholder="엑셀 내용을 그대로 붙여넣으세요."></textarea>
   <br />
@@ -195,12 +195,22 @@ function openQuestion(index) {
   const q = questionData[index];
   const detailBox = document.getElementById("detailBox");
 
-  const choices = [1, 2, 3, 4, 5].map(n => {
-    const value = q["보기" + n];
-    if (!value || value === "N.A") return "";
-    return `<div class="choice">${escapeHtml(value)}</div>`;
-  }).join("");
+  const choiceNums = ["①", "②", "③", "④", "⑤"];
 
+const choices = [1, 2, 3, 4, 5].map(n => {
+  const value = getValue(q, "보기" + n);
+  if (!value || value === "N.A") return "";
+
+  const num = choiceNums[n - 1];
+
+  // 이미 ①, ②가 붙어 있으면 중복 표시 방지
+  const text = /^[①②③④⑤]/.test(value.trim())
+    ? value
+    : num + " " + value;
+
+  return `<div class="choice">${escapeHtml(text)}</div>`;
+}).join("");
+  
   detailBox.innerHTML = `
     <div class="detail-box">
       <h2>${escapeHtml(q["문항제목"])}</h2>
